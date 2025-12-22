@@ -1,6 +1,6 @@
 # NYC Digital Services Spending Analysis
 
-**Analysis of NYC government technology spending to identify opportunities for building in-house digital service teams (e.g. 18F model)**
+**Analysis of NYC government technology spending to identify opportunities for building in-house digital service teams**
 
 ---
 
@@ -33,11 +33,6 @@ The final analysis files - these are what you need:
 
 ### **Working Notes** (`notes/`)
 - Research notes and methodology documentation
-
-### **Archive** (`data/archive/`)
-- `intermediate/` - Legacy vendor lists and classification intermediates
-- `legacy_classifications/` - Old classification files from earlier analysis phases
-- `samples/` - Sample extracts and test data
 
 ### **Scripts** (`scripts/`)
 - Download and data processing scripts (run from project root directory)
