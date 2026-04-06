@@ -519,6 +519,7 @@ let thresholdM = 0;
 let currentView = 'network';
 let isOtiMode = false;
 let pinnedNodes = new Set();
+let lockedHighlight = null;  // node id currently click-locked, or null
 
 const OTI_AGENCY = 'Department of Information Technology and Telecommunications';
 
@@ -615,7 +616,15 @@ function hideTooltip() { tooltip.classList.remove('visible'); }
 // ═══════════════════════════════════════════════════════════════════════════════
 // NETWORK VIEW
 // ═══════════════════════════════════════════════════════════════════════════════
-const svg = d3.select('#canvas').attr('width', W).attr('height', H);
+const svg = d3.select('#canvas').attr('width', W).attr('height', H)
+  .on('click', () => {
+    if (lockedHighlight) {
+      lockedHighlight = null;
+      hideTooltip();
+      // nodeGroup/linkSel may not exist yet on first render; guard against that
+      if (typeof nodeGroup !== 'undefined') resetNet(nodeGroup, linkSel);
+    }
+  });
 
 const defs = svg.append('defs');
 const glowFilter = defs.append('filter').attr('id', 'glow')
@@ -662,13 +671,24 @@ function buildGraph() {
       .on('drag',  (e, d) => { d.fx = e.x; d.fy = e.y; })
       .on('end',   (e, d) => { if (!e.active) simulation.alphaTarget(0); if (!pinnedNodes.has(d.id)) { d.fx = null; d.fy = null; } })
     )
-    .on('mouseover', (event, d) => { showTooltip(d, event); highlightNet(d, nodeGroup, linkSel); })
-    .on('mousemove', (event)    => positionTooltip(event))
-    .on('mouseout',  ()         => { hideTooltip(); resetNet(nodeGroup, linkSel); })
+    .on('mouseover', (event, d) => {
+      showTooltip(d, event);
+      if (!lockedHighlight) highlightNet(d, nodeGroup, linkSel);
+    })
+    .on('mousemove', (event) => positionTooltip(event))
+    .on('mouseout',  () => {
+      hideTooltip();
+      if (!lockedHighlight) resetNet(nodeGroup, linkSel);
+    })
     .on('click', (event, d) => {
       event.stopPropagation();
-      if (pinnedNodes.has(d.id)) { pinnedNodes.delete(d.id); d.fx = null; d.fy = null; }
-      else { pinnedNodes.add(d.id); d.fx = d.x; d.fy = d.y; }
+      if (lockedHighlight === d.id) {
+        lockedHighlight = null;
+        hideTooltip(); resetNet(nodeGroup, linkSel);
+      } else {
+        lockedHighlight = d.id;
+        showTooltip(d, event); highlightNet(d, nodeGroup, linkSel);
+      }
     });
 
   nodeSel = nodeGroup;
@@ -859,37 +879,59 @@ function buildSankey() {
       return d.id.length > maxLen ? d.id.substring(0, maxLen - 2) + '\u2026' : d.id;
     });
 
-  // ── Hover ──
+  function applySkHighlight(d) {
+    const connIds = new Set([d.id]);
+    linkPaths.each(function(l) {
+      if (l.source.id === d.id || l.target.id === d.id) {
+        connIds.add(l.source.id); connIds.add(l.target.id);
+      }
+    });
+    linkPaths
+      .attr('stroke-opacity', l =>
+        (l.source.id === d.id || l.target.id === d.id) ? 1 : 0.04)
+      .attr('stroke', l =>
+        (l.source.id === d.id || l.target.id === d.id)
+          ? `url(#${gradId(l.target)})`
+          : 'rgba(255,255,255,0.15)');
+    nodeRects
+      .attr('fill-opacity', nd => connIds.has(nd.id) ? 0.95 : 0.12)
+      .attr('filter', nd => connIds.has(nd.id) ? 'url(#sk-glow)' : null);
+  }
+  function resetSkHighlight() {
+    linkPaths
+      .attr('stroke-opacity', 1)
+      .attr('stroke', d => `url(#${gradId(d.target)})`);
+    nodeRects.attr('fill-opacity', 0.82).attr('filter', null);
+  }
+
+  // ── Hover & click ──
   nodeRects
     .on('mouseover', (event, d) => {
       showTooltip(d, event);
-      const connIds = new Set([d.id]);
-      linkPaths.each(function(l) {
-        if (l.source.id === d.id || l.target.id === d.id) {
-          connIds.add(l.source.id); connIds.add(l.target.id);
-        }
-      });
-      linkPaths
-        .attr('stroke-opacity', l =>
-          (l.source.id === d.id || l.target.id === d.id) ? 1 : 0.04)
-        .attr('stroke', l =>
-          (l.source.id === d.id || l.target.id === d.id)
-            ? `url(#${gradId(l.target)})`
-            : 'rgba(255,255,255,0.15)');
-      nodeRects
-        .attr('fill-opacity', nd => connIds.has(nd.id) ? 0.95 : 0.12)
-        .attr('filter', nd => connIds.has(nd.id) ? 'url(#sk-glow)' : null);
+      if (!lockedHighlight) applySkHighlight(d);
     })
     .on('mousemove', event => positionTooltip(event))
     .on('mouseout', () => {
       hideTooltip();
-      linkPaths
-        .attr('stroke-opacity', 1)
-        .attr('stroke', d => `url(#${gradId(d.target)})`);
-      nodeRects
-        .attr('fill-opacity', 0.82)
-        .attr('filter', null);
+      if (!lockedHighlight) resetSkHighlight();
+    })
+    .on('click', (event, d) => {
+      event.stopPropagation();
+      if (lockedHighlight === d.id) {
+        lockedHighlight = null;
+        hideTooltip(); resetSkHighlight();
+      } else {
+        lockedHighlight = d.id;
+        showTooltip(d, event); applySkHighlight(d);
+      }
     });
+
+  skSvg.on('click', () => {
+    if (lockedHighlight) {
+      lockedHighlight = null;
+      hideTooltip(); resetSkHighlight();
+    }
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -897,6 +939,8 @@ function buildSankey() {
 // ═══════════════════════════════════════════════════════════════════════════════
 function switchView(view) {
   currentView = view;
+  lockedHighlight = null;
+  hideTooltip();
   const isNet = view === 'network';
   document.getElementById('canvas').style.display        = isNet ? '' : 'none';
   document.getElementById('sankey-canvas').style.display = isNet ? 'none' : '';
