@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NYC Pays Vendors Billions for Government Tech</title>
+<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;0,6..72,700;1,6..72,400&family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #1b1b1e;
+    --ink-secondary: #4a4a52;
+    --ink-muted: #8e8e96;
+    --paper: #faf8f5;
+    --paper-warm: #f5f0ea;
+    --card: #ffffff;
+    --vermillion: #c23b22;
+    --vermillion-light: rgba(194,59,34,0.08);
+    --slate: #3d5a80;
+    --slate-light: rgba(61,90,128,0.08);
+    --ochre: #d4913b;
+    --teal: #2a9d8f;
+    --charcoal: #264653;
+    --rule: #1b1b1e;
+    --rule-light: #d4d0cb;
+    --grid: #eae6e0;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: 'Barlow', 'Helvetica Neue', sans-serif;
+    background: var(--paper);
+    color: var(--ink);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* ——— MASTHEAD ——— */
+  .masthead {
+    text-align: center;
+    padding: 1.2rem 1rem 0.8rem;
+    border-bottom: 1px solid var(--rule-light);
+    background: var(--card);
+  }
+  .masthead-label {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 600;
+    font-size: 0.7rem;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--vermillion);
+  }
+
+  /* ——— HERO ——— */
+  .hero {
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 3.5rem 1.5rem 2.5rem;
+    text-align: center;
+  }
+  .hero h1 {
+    font-family: 'Newsreader', Georgia, serif;
+    font-size: clamp(2.2rem, 5vw, 3.4rem);
+    font-weight: 700;
+    line-height: 1.1;
+    letter-spacing: -0.025em;
+    color: var(--ink);
+    margin-bottom: 1rem;
+  }
+  .hero .dek {
+    font-family: 'Newsreader', Georgia, serif;
+    font-size: 1.2rem;
+    font-weight: 400;
+    line-height: 1.55;
+    color: var(--ink-secondary);
+    max-width: 600px;
+    margin: 0 auto 1.2rem;
+  }
+  .hero .byline {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 500;
+    font-size: 0.82rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+  }
+  .hero .byline span { color: var(--ink-secondary); font-weight: 600; }
+
+  .hero-rule {
+    width: 80px;
+    height: 3px;
+    background: var(--vermillion);
+    margin: 0 auto 2rem;
+    border: none;
+  }
+
+  /* ——— STAT STRIP ——— */
+  .stat-strip {
+    display: flex;
+    max-width: 820px;
+    margin: 0 auto 2rem;
+    padding: 0 1.5rem;
+    gap: 0;
+  }
+  .stat-card {
+    flex: 1;
+    text-align: center;
+    padding: 1.6rem 1rem;
+    position: relative;
+  }
+  .stat-card:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: 20%;
+    height: 60%;
+    width: 1px;
+    background: var(--rule-light);
+  }
+  .stat-number {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 700;
+    font-size: 2.8rem;
+    line-height: 1;
+    letter-spacing: -0.02em;
+  }
+  .stat-number.vermillion { color: var(--vermillion); }
+  .stat-number.slate { color: var(--slate); }
+  .stat-number.charcoal { color: var(--charcoal); }
+  .stat-unit {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 500;
+    font-size: 0.75rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-muted);
+    margin-top: 0.35rem;
+    line-height: 1.4;
+  }
+
+  /* ——— SECTIONS ——— */
+  .section {
+    max-width: 900px;
+    margin: 0 auto 1rem;
+    padding: 2.5rem 2rem 2rem;
+    background: var(--card);
+    border-top: 2px solid var(--ink);
+    position: relative;
+  }
+  .section::before {
+    content: attr(data-number);
+    position: absolute;
+    top: -1px;
+    right: 2rem;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 700;
+    font-size: 0.65rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--card);
+    background: var(--ink);
+    padding: 0.25rem 0.6rem;
+  }
+  .section-head {
+    margin-bottom: 1.5rem;
+  }
+  .section-head h2 {
+    font-family: 'Newsreader', Georgia, serif;
+    font-size: 1.65rem;
+    font-weight: 600;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+    margin-bottom: 0.4rem;
+  }
+  .section-head .deck {
+    font-size: 0.95rem;
+    color: var(--ink-secondary);
+    max-width: 640px;
+    line-height: 1.55;
+  }
+
+  .chart-wrap {
+    width: 100%;
+    margin: 0.5rem 0;
+  }
+
+  .source-line {
+    font-family: 'Barlow', sans-serif;
+    font-size: 0.7rem;
+    color: var(--ink-muted);
+    margin-top: 0.75rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--grid);
+    letter-spacing: 0.02em;
+  }
+
+  /* ——— NARRATIVE ——— */
+  .narrative {
+    max-width: 620px;
+    margin: 2rem auto;
+    padding: 0 1.5rem;
+    font-family: 'Newsreader', Georgia, serif;
+    font-size: 1.1rem;
+    color: var(--ink-secondary);
+    line-height: 1.75;
+  }
+
+  /* ——— CALLOUT ——— */
+  .callout {
+    max-width: 620px;
+    margin: 2rem auto;
+    padding: 1.25rem 1.5rem 1.25rem 1.75rem;
+    background: var(--vermillion-light);
+    border-left: 3px solid var(--vermillion);
+    font-family: 'Newsreader', Georgia, serif;
+    font-size: 1rem;
+    line-height: 1.6;
+    color: var(--ink-secondary);
+  }
+  .callout strong {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 600;
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--vermillion);
+    display: block;
+    margin-bottom: 0.2rem;
+  }
+
+  /* ——— LEGEND PILLS ——— */
+  .legend-inline {
+    display: flex;
+    gap: 1.25rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+  }
+  .legend-pill {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: var(--ink-secondary);
+  }
+  .legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+
+  /* ——— FOOTER ——— */
+  .footer {
+    max-width: 900px;
+    margin: 2rem auto 4rem;
+    padding: 1.5rem 2rem;
+    border-top: 2px solid var(--ink);
+    font-size: 0.78rem;
+    color: var(--ink-muted);
+    line-height: 1.65;
+  }
+  .footer a {
+    color: var(--slate);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+  .footer-label {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 600;
+    font-size: 0.68rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-secondary);
+    margin-bottom: 0.4rem;
+  }
+
+  /* ——— PLOTLY OVERRIDES ——— */
+  .js-plotly-plot .plotly .modebar { display: none !important; }
+
+  /* ——— SCROLL REVEAL ——— */
+  .reveal {
+    opacity: 0;
+    transform: translateY(18px);
+    transition: opacity 0.5s ease, transform 0.5s ease;
+  }
+  .reveal.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* ——— RESPONSIVE ——— */
+  @media (max-width: 640px) {
+    .stat-strip { flex-direction: column; gap: 0; }
+    .stat-card:not(:last-child)::after { display: none; }
+    .stat-card { border-bottom: 1px solid var(--grid); }
+    .section { padding: 2rem 1.25rem 1.5rem; margin-left: 0.5rem; margin-right: 0.5rem; }
+    .hero { padding: 2.5rem 1.25rem 2rem; }
+    .section::before { right: 1.25rem; }
+  }
+</style>
+</head>
+<body>
+
+<!-- MASTHEAD -->
+<div class="masthead">
+  <div class="masthead-label">Checkbook NYC Analysis</div>
+</div>
+
+<!-- HERO -->
+<div class="hero reveal">
+  <h1>NYC Pays Vendors Billions for Government Tech</h1>
+  <p class="dek">A preliminary analysis of digital service vendor spending reveals at least $769&nbsp;million in annual outsourced work that could be delivered in-house.</p>
+  <p class="byline">By <span>Hendrick Townley</span> &middot; FY2016&ndash;2025 Data</p>
+</div>
+
+<hr class="hero-rule">
+
+<!-- STAT STRIP -->
+<div class="stat-strip reveal">
+  <div class="stat-card">
+    <div class="stat-number vermillion">$769M</div>
+    <div class="stat-unit">Floor estimate<br>outsourced digital services</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-number slate">$2.2B</div>
+    <div class="stat-unit">Through vendors with<br>any digital services</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-number charcoal">151</div>
+    <div class="stat-unit">Classified digital<br>service vendors</div>
+  </div>
+</div>
+
+<!-- 1. WATERFALL CHART -->
+<div class="section reveal" data-number="01">
+  <div class="section-head">
+    <h2>Building Up to $769 Million</h2>
+    <p class="deck">Digital spending hides everywhere in NYC's books. Our floor estimate layers three sources of confirmed spending &mdash; and the true figure is certainly higher.</p>
+  </div>
+  <div id="waterfall-chart" class="chart-wrap"></div>
+  <div class="source-line">Source: Checkbook NYC, FY2025. Floor estimate = $566M pure digital vendors + $203M digital portion of mixed vendors via high-confidence expense categories.</div>
+</div>
+
+<!-- NARRATIVE -->
+<p class="narrative reveal">
+  The annual budget for NYC's central technology office, OTI, alone is ~$800&nbsp;million. Budget codes and expense categories systematically undercount digital work &mdash; categories named "Construction-Buildings" actually fund millions in software development.
+</p>
+
+<!-- 2. STACKED AREA -->
+<div class="section reveal" data-number="02">
+  <div class="section-head">
+    <h2>A Decade of Growth in Tech Vendor Spending</h2>
+    <p class="deck">Total spending on classified digital services vendors has grown from $827M in FY2016 to $2.2B in FY2025 &mdash; a 166% increase. Pure digital service vendors have grown fastest.</p>
+  </div>
+  <div class="legend-inline">
+    <div class="legend-pill"><div class="legend-dot" style="background: var(--vermillion)"></div>Digital Vendors (108)</div>
+    <div class="legend-pill"><div class="legend-dot" style="background: var(--slate)"></div>Mixed Vendors (43)</div>
+  </div>
+  <div id="stacked-area" class="chart-wrap"></div>
+  <div class="source-line">Source: Checkbook NYC. 151 classified vendors. Mixed vendors also sell hardware &amp; infrastructure.</div>
+</div>
+
+<!-- 3. PROJECT LINES -->
+<div class="section reveal" data-number="03">
+  <div class="section-head">
+    <h2>Big-Name Projects, Big-Name Price Tags</h2>
+    <p class="deck">Six high-profile technology projects account for hundreds of millions. NYC Cyber Command alone has received $564M since FY2016, peaking at $116M in FY2023.</p>
+  </div>
+  <div id="project-lines" class="chart-wrap"></div>
+  <div class="source-line">Source: Checkbook NYC budget codes. DOB NOW combines codes 6111 + NOW2. 311 shows IT vendor spending only (~15% of total).</div>
+</div>
+
+<!-- CALLOUT -->
+<div class="callout reveal">
+  <strong>For context</strong>
+  Independent reporting estimated MyCity's cost at $100+ million, suggesting our analysis overall understates actual spending. The original CityTime project became a $700+ million scandal in 2011 &mdash; predating our data entirely.
+</div>
+
+<!-- 4. VENDOR BARS -->
+<div class="section reveal" data-number="04">
+  <div class="section-head">
+    <h2>Who Gets the Money</h2>
+    <p class="deck">The top 20 vendors by FY2025 spending. CDW Government alone received $569M &mdash; more than the entire budget of most city agencies.</p>
+  </div>
+  <div class="legend-inline">
+    <div class="legend-pill"><div class="legend-dot" style="background: var(--vermillion)"></div>Pure Digital Services</div>
+    <div class="legend-pill"><div class="legend-dot" style="background: var(--slate)"></div>Mixed (Digital + Hardware)</div>
+  </div>
+  <div id="vendor-bars" class="chart-wrap"></div>
+  <div class="source-line">Source: Checkbook NYC, FY2025. Vendor classification based on primary service offering research.</div>
+</div>
+
+<!-- 5. EXPENSE CATEGORIES -->
+<div class="section reveal" data-number="05">
+  <div class="section-head">
+    <h2>Don't Trust the Category Names</h2>
+    <p class="deck">Expense category names routinely mislead. "Construction-Buildings" sounds like bricks and mortar, but Spruce Technology and Prutech bill to it for DOB NOW system implementation.</p>
+  </div>
+  <div id="expense-bars" class="chart-wrap"></div>
+  <div class="source-line">Source: Checkbook NYC, FY2025. Percent shows share of category spending going to classified digital services vendors.</div>
+</div>
+
+<!-- 6. COMPARISON -->
+<div class="section reveal" data-number="06">
+  <div class="section-head">
+    <h2>What $769M Could Fund Instead</h2>
+    <p class="deck">State and local digital service teams achieve outsized returns on modest budgets. The U.S. Digital Service reported $3.5B in savings in 2020 from a team of ~200 people.</p>
+  </div>
+  <div id="comparison-chart" class="chart-wrap"></div>
+  <div class="source-line">Budget figures from published reports. NJ Office of Innovation, MA Digital Service, USDS 2020 Impact Report.</div>
+</div>
+
+<!-- 7. TREEMAP -->
+<div class="section reveal" data-number="07">
+  <div class="section-head">
+    <h2>Where the Money Goes</h2>
+    <p class="deck">Each rectangle is a budget code, sized by FY2025 spending. Many IT-sounding codes primarily fund personnel &mdash; while vague names like "Consolidations" are 100% IT vendors.</p>
+  </div>
+  <div class="legend-inline">
+    <div class="legend-pill"><div class="legend-dot" style="background: var(--vermillion)"></div>Digital</div>
+    <div class="legend-pill"><div class="legend-dot" style="background: var(--slate)"></div>Mixed</div>
+  </div>
+  <div id="budget-treemap" class="chart-wrap"></div>
+  <div class="source-line">Source: Checkbook NYC, FY2025. 51 classified budget codes. Hover to explore.</div>
+</div>
+
+<!-- FOOTER -->
+<div class="footer">
+  <div class="footer-label">Methodology</div>
+  <p>Transaction-level spending data from Checkbook NYC for FY2016&ndash;2025 (29 million rows). Vendors classified via LLM-assisted research as "Digital" (primarily software/consulting) or "Mixed" (digital services bundled with hardware/infrastructure). Budget codes and expense categories cross-referenced with vendor classifications. Full methodology and data at <a href="https://github.com/henrytownley/nyc-tech-spending">github.com/henrytownley/nyc-tech-spending</a>.</p>
+  <br>
+  <div class="footer-label">Credits</div>
+  <p>Written by Hendrick Townley with thanks to Aidan Feldman, Dan Getelman, and Ruthie Nachmany.</p>
+</div>
+
+<script>
+// ============================================================
+// CONFIG
+// ============================================================
+const FONT = 'Barlow, Helvetica Neue, sans-serif';
+const FONT_COND = 'Barlow Condensed, Helvetica Neue, sans-serif';
+const FONT_MONO = 'JetBrains Mono, monospace';
+
+const C = {
+  vermillion: '#c23b22',
+  vermillionMed: 'rgba(194,59,34,0.65)',
+  vermillionLight: 'rgba(194,59,34,0.12)',
+  slate: '#3d5a80',
+  slateMed: 'rgba(61,90,128,0.65)',
+  slateLight: 'rgba(61,90,128,0.12)',
+  ochre: '#d4913b',
+  teal: '#2a9d8f',
+  charcoal: '#264653',
+  green: '#588157',
+  gray: '#9a9a9a',
+  gridLine: '#eae6e0',
+  ink: '#1b1b1e',
+  inkSec: '#4a4a52',
+  inkMuted: '#8e8e96',
+};
+
+const LAYOUT = {
+  font: { family: FONT, color: C.ink, size: 12 },
+  paper_bgcolor: 'rgba(0,0,0,0)',
+  plot_bgcolor: 'rgba(0,0,0,0)',
+  margin: { l: 50, r: 30, t: 15, b: 45 },
+  hoverlabel: {
+    font: { family: FONT, size: 13, color: C.ink },
+    bgcolor: '#fff',
+    bordercolor: C.gridLine,
+  },
+};
+const CFG = { displayModeBar: false, responsive: true };
+const YEARS = ['FY16','FY17','FY18','FY19','FY20','FY21','FY22','FY23','FY24','FY25'];
+
+// ============================================================
+// 1. WATERFALL — "Building Up to $769M"
+// ============================================================
+(function() {
+  const data = [{
+    type: 'waterfall',
+    orientation: 'v',
+    x: [
+      'Obviously Digital',
+      'Hidden in<br>Misleading Categories',
+      'Mixed Vendor<br>Digital Work',
+      'Floor Estimate'
+    ],
+    y: [442, 124, 203, 0],
+    measure: ['absolute', 'relative', 'relative', 'total'],
+    text: ['$442M', '+$124M', '+$203M', '$769M'],
+    textposition: 'outside',
+    textfont: {
+      family: FONT_COND,
+      size: [16, 16, 16, 20],
+      color: [C.inkSec, C.inkSec, C.inkSec, C.vermillion],
+      weight: [500, 500, 500, 700],
+    },
+    connector: {
+      line: { color: C.gridLine, width: 1.5, dash: 'dot' }
+    },
+    decreasing: { marker: { color: C.slate } },
+    increasing: { marker: { color: C.ochre } },
+    totals: { marker: { color: C.vermillion } },
+    marker: {
+      color: [C.slate, C.ochre, C.teal, C.vermillion],
+      line: { width: 0 },
+    },
+    hovertemplate: [
+      '<b>Obviously Digital</b><br>SBITA + Prof Serv Computer Services<br><b>$442M</b><extra></extra>',
+      '<b>Hidden in Misleading Categories</b><br>Digital vendors in "Construction-Buildings",<br>"Contractual Services", etc.<br><b>+$124M</b><extra></extra>',
+      '<b>Mixed Vendor Digital Work</b><br>CDW, SHI, etc. filtered through<br>high-confidence expense categories<br><b>+$203M</b><extra></extra>',
+      '<b>Floor Estimate</b><br>$566M digital vendors + $203M mixed<br><b>$769M</b><extra></extra>',
+    ],
+  }];
+
+  const layout = {
+    ...LAYOUT,
+    height: 400,
+    margin: { l: 60, r: 40, t: 20, b: 70 },
+    xaxis: {
+      tickfont: { family: FONT, size: 12.5, color: C.inkSec },
+      linecolor: C.gridLine,
+    },
+    yaxis: {
+      title: { text: '$ Millions', font: { size: 11, color: C.inkMuted } },
+      gridcolor: C.gridLine,
+      tickprefix: '$',
+      ticksuffix: 'M',
+      tickfont: { size: 11, color: C.inkMuted },
+      range: [0, 900],
+    },
+    showlegend: false,
+    annotations: [
+      {
+        x: 'Floor Estimate',
+        y: 825,
+        text: '...and the true figure<br>is certainly higher',
+        showarrow: false,
+        font: { family: 'Newsreader, Georgia, serif', size: 13, color: C.vermillion, style: 'italic' },
+        bgcolor: 'rgba(250,248,245,0.9)',
+        borderpad: 5,
+      },
+      {
+        x: 'Obviously Digital',
+        y: 220,
+        text: 'SBITA + "Prof Serv<br>Computer Services"',
+        showarrow: false,
+        font: { family: FONT, size: 10.5, color: '#fff' },
+      },
+      {
+        x: 'Hidden in<br>Misleading Categories',
+        y: 505,
+        text: '"Construction-<br>Buildings" etc.',
+        showarrow: false,
+        font: { family: FONT, size: 10.5, color: '#fff' },
+      },
+      {
+        x: 'Mixed Vendor<br>Digital Work',
+        y: 670,
+        text: 'CDW, SHI<br>consulting',
+        showarrow: false,
+        font: { family: FONT, size: 10.5, color: '#fff' },
+      },
+    ],
+  };
+
+  Plotly.newPlot('waterfall-chart', data, layout, CFG);
+})();
+
+// ============================================================
+// 2. STACKED AREA
+// ============================================================
+(function() {
+  const digital = [123.9, 160.1, 185.9, 289.4, 297.7, 333.0, 371.6, 472.7, 595.4, 565.6];
+  const mixed   = [703.5, 630.8, 756.5, 812.6, 873.2, 1138.7, 1466.8, 1387.1, 1548.2, 1636.4];
+
+  const data = [
+    {
+      x: YEARS, y: digital, name: 'Digital (108)',
+      type: 'scatter', mode: 'lines',
+      fill: 'tozeroy',
+      fillcolor: C.vermillionLight,
+      line: { color: C.vermillion, width: 2.5, shape: 'spline' },
+      hovertemplate: '<b>Digital vendors</b><br>$%{y:.0f}M<extra></extra>',
+    },
+    {
+      x: YEARS, y: mixed, name: 'Mixed (43)',
+      type: 'scatter', mode: 'lines',
+      fill: 'tozeroy',
+      fillcolor: C.slateLight,
+      line: { color: C.slate, width: 2.5, shape: 'spline' },
+      hovertemplate: '<b>Mixed vendors</b><br>$%{y:.0f}M<extra></extra>',
+    },
+  ];
+
+  const layout = {
+    ...LAYOUT,
+    height: 380,
+    margin: { l: 60, r: 30, t: 10, b: 45 },
+    showlegend: false,
+    xaxis: { gridcolor: C.gridLine, tickfont: { size: 12 }, linecolor: C.gridLine },
+    yaxis: {
+      title: { text: 'Spending ($ millions)', font: { size: 11, color: C.inkMuted } },
+      gridcolor: C.gridLine,
+      tickprefix: '$', ticksuffix: 'M',
+      tickfont: { size: 11, color: C.inkMuted },
+      rangemode: 'tozero',
+    },
+    annotations: [
+      {
+        x: 'FY25', y: 1636.4,
+        text: '<b>$1.6B</b> Mixed',
+        showarrow: true, arrowhead: 0, arrowcolor: C.slate, arrowwidth: 1.5,
+        ax: -45, ay: -25,
+        font: { size: 12, color: C.slate },
+        bgcolor: 'rgba(255,255,255,0.92)', borderpad: 4,
+      },
+      {
+        x: 'FY25', y: 565.6,
+        text: '<b>$566M</b> Digital',
+        showarrow: true, arrowhead: 0, arrowcolor: C.vermillion, arrowwidth: 1.5,
+        ax: -45, ay: 20,
+        font: { size: 12, color: C.vermillion },
+        bgcolor: 'rgba(255,255,255,0.92)', borderpad: 4,
+      },
+      {
+        x: 'FY16', y: 827,
+        text: '$827M total<br>in FY16',
+        showarrow: false,
+        font: { size: 10.5, color: C.inkMuted },
+        xanchor: 'left',
+      },
+    ],
+  };
+
+  Plotly.newPlot('stacked-area', data, layout, CFG);
+})();
+
+// ============================================================
+// 3. PROJECT LINES
+// ============================================================
+(function() {
+  const P = {
+    'NYC Cyber Command': { v: [9.5,10.8,8.4,25.9,43.1,73.2,94.4,116.4,97.1,85.4], c: C.vermillion, w: 3 },
+    'DOB NOW':           { v: [0.01,4.02,13.61,13.7,15.8,19.7,8.7,13.9,13.3,11.6], c: C.slate, w: 2.5 },
+    'PASSPort':          { v: [0,11.5,4.6,15.0,14.2,8.9,11.1,11.7,9.8,3.4], c: C.ochre, w: 2.5 },
+    'CityTime':          { v: [7.8,9.5,8.4,7.0,7.7,9.1,9.6,8.1,9.5,9.3], c: C.gray, w: 2 },
+    'MyCity':            { v: [0,0,0,0,0,0,0,6.0,27.6,19.1], c: C.teal, w: 2.5 },
+    '311 (IT only)':     { v: [2.1,2.3,2.6,3.0,3.5,5.7,5.7,5.7,5.1,5.1], c: '#b5a886', w: 2 },
+  };
+
+  const data = Object.entries(P).map(([name, p]) => ({
+    x: YEARS, y: p.v, name,
+    type: 'scatter', mode: 'lines+markers',
+    line: { color: p.c, width: p.w, shape: 'spline' },
+    marker: { size: 4, color: p.c },
+    hovertemplate: `<b>${name}</b><br>$%{y:.1f}M<extra></extra>`,
+  }));
+
+  const layout = {
+    ...LAYOUT,
+    height: 420,
+    margin: { l: 55, r: 110, t: 10, b: 45 },
+    xaxis: { gridcolor: C.gridLine, tickfont: { size: 12 }, linecolor: C.gridLine },
+    yaxis: {
+      title: { text: 'Spending ($ millions)', font: { size: 11, color: C.inkMuted } },
+      gridcolor: C.gridLine,
+      tickprefix: '$', ticksuffix: 'M',
+      tickfont: { size: 11, color: C.inkMuted },
+      rangemode: 'tozero',
+    },
+    showlegend: false,
+    annotations: [
+      // End labels (Upshot style)
+      ...Object.entries(P).filter(([,p]) => p.v[9] > 0).map(([name, p]) => ({
+        x: 'FY25', y: p.v[9],
+        text: name === 'NYC Cyber Command' ? '<b>Cyber Command</b>' : name,
+        xanchor: 'left', showarrow: false,
+        xshift: 8,
+        font: { size: 11, color: p.c, family: FONT },
+      })),
+      {
+        x: 'FY23', y: 116.4,
+        text: '$116M peak',
+        showarrow: true, arrowhead: 0, arrowcolor: C.vermillion, arrowwidth: 1,
+        ax: 0, ay: -28,
+        font: { size: 11, color: C.vermillion, family: FONT_COND, weight: 600 },
+        bgcolor: 'rgba(255,255,255,0.92)', borderpad: 3,
+      },
+    ],
+  };
+
+  Plotly.newPlot('project-lines', data, layout, CFG);
+})();
+
+// ============================================================
+// 4. VENDOR BARS
+// ============================================================
+(function() {
+  const vendors = [
+    { name: 'CDW Government', fy25: 568.5, type: 'Mixed' },
+    { name: 'SHI International', fy25: 287.6, type: 'Mixed' },
+    { name: 'Motorola Solutions', fy25: 136.5, type: 'Mixed' },
+    { name: 'NTT Data Americas', fy25: 94.6, type: 'Mixed' },
+    { name: 'Presidio Networked Solutions', fy25: 83.9, type: 'Mixed' },
+    { name: 'Dell Marketing', fy25: 78.7, type: 'Mixed' },
+    { name: 'World Wide Technology', fy25: 74.3, type: 'Mixed' },
+    { name: 'Vexcel Corporation', fy25: 72.0, type: 'Digital' },
+    { name: 'IBM', fy25: 71.4, type: 'Mixed' },
+    { name: 'Prutech Solutions', fy25: 61.1, type: 'Digital' },
+    { name: 'Compulink Technologies', fy25: 39.1, type: 'Digital' },
+    { name: 'Nagarro', fy25: 36.6, type: 'Digital' },
+    { name: 'Spruce Technology', fy25: 34.3, type: 'Digital' },
+    { name: 'Innovative Biz Concepts', fy25: 33.3, type: 'Digital' },
+    { name: 'Mason Technologies', fy25: 25.3, type: 'Mixed' },
+    { name: '22nd Century Tech', fy25: 22.6, type: 'Digital' },
+    { name: 'SVAM International', fy25: 20.4, type: 'Mixed' },
+    { name: 'Mythics', fy25: 20.2, type: 'Digital' },
+    { name: 'The Remi Group', fy25: 19.9, type: 'Mixed' },
+    { name: 'Motorola Connectivity', fy25: 18.5, type: 'Mixed' },
+  ].reverse();
+
+  const data = [{
+    type: 'bar',
+    orientation: 'h',
+    y: vendors.map(v => v.name),
+    x: vendors.map(v => v.fy25),
+    marker: {
+      color: vendors.map(v => v.type === 'Digital' ? C.vermillion : C.slate),
+    },
+    text: vendors.map(v => `$${v.fy25.toFixed(0)}M`),
+    textposition: 'outside',
+    textfont: { family: FONT_COND, size: 12, color: C.inkSec, weight: 500 },
+    hovertemplate: vendors.map(v => `<b>${v.name}</b><br>$${v.fy25.toFixed(1)}M &middot; ${v.type}<extra></extra>`),
+  }];
+
+  const layout = {
+    ...LAYOUT,
+    height: 640,
+    margin: { l: 190, r: 65, t: 10, b: 40 },
+    xaxis: {
+      gridcolor: C.gridLine,
+      tickprefix: '$', ticksuffix: 'M',
+      tickfont: { size: 11, color: C.inkMuted },
+    },
+    yaxis: {
+      tickfont: { family: FONT, size: 11.5, color: C.inkSec },
+      automargin: true,
+    },
+    bargap: 0.22,
+    showlegend: false,
+  };
+
+  Plotly.newPlot('vendor-bars', data, layout, CFG);
+})();
+
+// ============================================================
+// 5. EXPENSE CATEGORIES
+// ============================================================
+(function() {
+  const cats = [
+    { name: 'SBITA (Capital)', pct: 96.6, spend: 150.8 },
+    { name: 'SBITA (Expense)', pct: 96.1, spend: 12.7 },
+    { name: 'Prof Serv Computer Services', pct: 93.8, spend: 278.9 },
+    { name: 'Data Proc Equip Maint', pct: 87.7, spend: 569.7 },
+    { name: 'Purch Data Proc Equip', pct: 72.0, spend: 46.7 },
+    { name: 'Telecom Maintenance', pct: 58.4, spend: 43.0 },
+    { name: 'Capital Purchased Equip', pct: 30.5, spend: 977.5 },
+    { name: 'Data Processing Supplies', pct: 28.0, spend: 169.5 },
+    { name: 'Supplies & Materials', pct: 15.9, spend: 1062.6 },
+    { name: 'Contractual Serv General', pct: 15.1, spend: 1358.7 },
+    { name: 'Maint & Rep General', pct: 10.8, spend: 228.6 },
+    { name: 'Prof Serv Other', pct: 9.4, spend: 746.0 },
+    { name: 'Administrative Expenses', pct: 7.7, spend: 407.3 },
+    { name: 'Books-Other', pct: 5.6, spend: 95.3 },
+    { name: 'Other Serv & Charges', pct: 2.0, spend: 890.7 },
+    { name: 'Construction-Buildings', pct: 1.7, spend: 11749.8 },
+    { name: 'Telephone & Comms', pct: 0.4, spend: 258.6 },
+  ].reverse();
+
+  const barColors = cats.map(c =>
+    c.pct >= 70 ? C.vermillion : c.pct >= 25 ? C.ochre : C.slate
+  );
+
+  const data = [{
+    type: 'bar',
+    orientation: 'h',
+    y: cats.map(c => c.name),
+    x: cats.map(c => c.pct),
+    marker: { color: barColors },
+    text: cats.map(c => `${c.pct}%`),
+    textposition: 'outside',
+    textfont: { family: FONT_COND, size: 11.5, color: C.inkSec, weight: 500 },
+    hovertemplate: cats.map(c =>
+      `<b>${c.name}</b><br>${c.pct}% to digital vendors<br>Total category: $${c.spend.toFixed(0)}M<extra></extra>`
+    ),
+  }];
+
+  const layout = {
+    ...LAYOUT,
+    height: 560,
+    margin: { l: 195, r: 55, t: 10, b: 50 },
+    xaxis: {
+      gridcolor: C.gridLine,
+      ticksuffix: '%',
+      tickfont: { size: 11, color: C.inkMuted },
+      title: { text: '% of category spending to classified digital vendors', font: { size: 11, color: C.inkMuted } },
+      range: [0, 108],
+    },
+    yaxis: {
+      tickfont: { family: FONT, size: 11, color: C.inkSec },
+      automargin: true,
+    },
+    bargap: 0.28,
+    showlegend: false,
+    annotations: [{
+      x: 52, y: 'Construction-Buildings',
+      text: '<b>1.7% of $11.7B</b> = ~$200M<br>in digital vendor payments',
+      showarrow: true, arrowhead: 0, arrowcolor: C.ochre, arrowwidth: 1.5,
+      ax: 105, ay: 0,
+      font: { size: 11, color: C.inkSec, family: FONT },
+      bgcolor: 'rgba(255,255,255,0.95)',
+      bordercolor: C.gridLine,
+      borderpad: 6,
+    }],
+  };
+
+  Plotly.newPlot('expense-bars', data, layout, CFG);
+})();
+
+// ============================================================
+// 6. COMPARISON
+// ============================================================
+(function() {
+  const items = [
+    { name: "NYC outsourced<br>digital services", value: 769, color: C.vermillion },
+    { name: 'OTI annual<br>budget', value: 800, color: C.gray },
+    { name: 'USDS savings<br>(2020, 1 yr)', value: 3500, color: C.green },
+    { name: 'NJ Office of<br>Innovation', value: 15, color: C.teal },
+    { name: 'MA Digital<br>Service', value: 12, color: C.slate },
+    { name: 'USDS budget<br>(~200 staff)', value: 40, color: C.ochre },
+  ];
+
+  const data = [{
+    type: 'bar',
+    x: items.map(i => i.name),
+    y: items.map(i => i.value),
+    marker: { color: items.map(i => i.color) },
+    text: items.map(i => i.value >= 1000 ? `$${(i.value/1000).toFixed(1)}B` : `$${i.value}M`),
+    textposition: 'outside',
+    textfont: { family: FONT_COND, size: 14, color: C.ink, weight: 700 },
+    hovertemplate: items.map(i => `${i.name.replace(/<br>/g,' ')}: $${i.value}M<extra></extra>`),
+  }];
+
+  const layout = {
+    ...LAYOUT,
+    height: 400,
+    margin: { l: 50, r: 30, t: 20, b: 80 },
+    yaxis: {
+      type: 'log',
+      gridcolor: C.gridLine,
+      tickprefix: '$', ticksuffix: 'M',
+      tickfont: { size: 11, color: C.inkMuted },
+      dtick: 1, range: [0.8, 3.7],
+    },
+    xaxis: {
+      tickfont: { family: FONT, size: 11.5, color: C.inkSec },
+      tickangle: 0,
+    },
+    bargap: 0.4,
+    showlegend: false,
+    annotations: [{
+      x: 'NJ Office of<br>Innovation',
+      y: Math.log10(15) + 0.55,
+      text: '5 people, 6 months<br>→ $780K annual savings',
+      showarrow: true, arrowhead: 0, arrowcolor: C.teal, arrowwidth: 1.5,
+      ax: 0, ay: -35,
+      font: { size: 10.5, color: C.inkSec, family: FONT },
+      bgcolor: 'rgba(255,255,255,0.92)', borderpad: 4,
+    }],
+  };
+
+  Plotly.newPlot('comparison-chart', data, layout, CFG);
+})();
+
+// ============================================================
+// 7. TREEMAP
+// ============================================================
+(function() {
+  const codes = [
+    { code: '4648', name: 'GE Central School Support', fy25: 266.5, type: 'Mixed' },
+    { code: '7719', name: 'DIIT', fy25: 147.3, type: 'Mixed' },
+    { code: '1300', name: 'NYC Cyber Command', fy25: 85.4, type: 'Digital' },
+    { code: '0711', name: 'Public Safety IT', fy25: 71.4, type: 'Digital' },
+    { code: '0901', name: 'Technology Strategy', fy25: 65.1, type: 'Mixed' },
+    { code: '9912', name: 'Mgmt Info Systems (DSS)', fy25: 59.5, type: 'Digital' },
+    { code: '3800', name: 'IT Security', fy25: 45.8, type: 'Digital' },
+    { code: '1101', name: '311', fy25: 34.2, type: 'Mixed' },
+    { code: '3307', name: 'Tech Dev & Systems', fy25: 33.0, type: 'Digital' },
+    { code: '3310', name: 'Infra Tech Architecture', fy25: 26.3, type: 'Mixed' },
+    { code: '1054', name: 'Mgmt Info Svc (DEP)', fy25: 20.8, type: 'Digital' },
+    { code: '3131', name: 'Applications', fy25: 20.0, type: 'Mixed' },
+    { code: '8811', name: 'MyCity', fy25: 19.1, type: 'Digital' },
+    { code: '0104', name: 'Mgmt Info Svc (ACS)', fy25: 18.3, type: 'Mixed' },
+    { code: '1602', name: 'RI Telecom', fy25: 18.9, type: 'Mixed' },
+    { code: '3200', name: 'Mainframe', fy25: 18.2, type: 'Digital' },
+    { code: 'NGEN', name: 'Next Gen 911', fy25: 15.2, type: 'Digital' },
+    { code: '3330', name: 'ACRIS', fy25: 15.3, type: 'Digital' },
+    { code: '3204', name: 'Mainframe I/C', fy25: 14.3, type: 'Digital' },
+    { code: '1150', name: 'Info Technology', fy25: 12.5, type: 'Digital' },
+    { code: '6111', name: 'DOB NOW', fy25: 7.7, type: 'Digital' },
+    { code: '3400', name: 'Network Ops', fy25: 10.8, type: 'Digital' },
+    { code: '1084', name: 'Info Tech (DSNY)', fy25: 10.6, type: 'Digital' },
+    { code: '5000', name: 'CityTime', fy25: 9.3, type: 'Mixed' },
+    { code: '0702', name: 'Info Systems (Comptroller)', fy25: 9.3, type: 'Mixed' },
+    { code: '6633', name: 'Mgmt Info Sys (ACS)', fy25: 8.9, type: 'Digital' },
+    { code: '8100', name: 'Citywide Support', fy25: 8.1, type: 'Digital' },
+    { code: '9195', name: 'Office of Info Tech', fy25: 5.9, type: 'Digital' },
+    { code: '9580', name: 'Public Engagement', fy25: 5.4, type: 'Digital' },
+  ];
+
+  const data = [{
+    type: 'treemap',
+    labels: codes.map(c => `${c.name}<br><span style="font-size:11px">$${c.fy25.toFixed(0)}M</span>`),
+    parents: codes.map(() => ''),
+    values: codes.map(c => c.fy25),
+    marker: {
+      colors: codes.map(c => c.type === 'Digital'
+        ? 'rgba(194,59,34,0.62)'
+        : 'rgba(61,90,128,0.5)'
+      ),
+      line: { width: 2.5, color: '#fff' },
+    },
+    textfont: { family: FONT, size: 12, color: '#1b1b1e' },
+    hovertemplate: codes.map(c =>
+      `<b>${c.name}</b><br>Code: ${c.code}<br>FY25: $${c.fy25.toFixed(1)}M<br>${c.type}<extra></extra>`
+    ),
+    textposition: 'middle center',
+    pathbar: { visible: false },
+  }];
+
+  const layout = {
+    ...LAYOUT,
+    height: 480,
+    margin: { l: 4, r: 4, t: 4, b: 4 },
+  };
+
+  Plotly.newPlot('budget-treemap', data, layout, CFG);
+})();
+
+// ============================================================
+// SCROLL REVEAL
+// ============================================================
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      e.target.classList.add('visible');
+    }
+  });
+}, { threshold: 0.08, rootMargin: '0px 0px -40px 0px' });
+
+document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+</script>
+
+</body>
+</html>
