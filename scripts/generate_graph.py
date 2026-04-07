@@ -811,6 +811,14 @@ const skMerge = skGlow.append('feMerge');
 skMerge.append('feMergeNode').attr('in', 'blur');
 skMerge.append('feMergeNode').attr('in', 'SourceGraphic');
 
+const skGlowStrong = skDefs.append('filter').attr('id', 'sk-glow-strong')
+  .attr('x', '-100%').attr('y', '-100%').attr('width', '300%').attr('height', '300%');
+skGlowStrong.append('feGaussianBlur').attr('stdDeviation', '5').attr('result', 'blur');
+const skMergeStrong = skGlowStrong.append('feMerge');
+skMergeStrong.append('feMergeNode').attr('in', 'blur');
+skMergeStrong.append('feMergeNode').attr('in', 'SourceGraphic');
+skMerge.append('feMergeNode').attr('in', 'SourceGraphic');
+
 function buildSankey() {
   skSvg.selectAll('.sk-layer').remove();
 
@@ -931,6 +939,10 @@ function buildSankey() {
       return d.id.length > maxLen ? d.id.substring(0, maxLen - 2) + '\u2026' : d.id;
     });
 
+  const skLabels = skSvg.selectAll('.sk-label');
+
+  let lockedConnIds = null;  // set of connected node ids when highlight is locked
+
   function applySkHighlight(d) {
     const connIds = new Set([d.id]);
     linkPaths.each(function(l) {
@@ -938,6 +950,7 @@ function buildSankey() {
         connIds.add(l.source.id); connIds.add(l.target.id);
       }
     });
+    lockedConnIds = lockedHighlight ? connIds : null;
     linkPaths
       .attr('stroke-opacity', l =>
         (l.source.id === d.id || l.target.id === d.id) ? 1 : 0.04)
@@ -946,26 +959,45 @@ function buildSankey() {
           ? `url(#${gradId(l.target)})`
           : 'rgba(255,255,255,0.15)');
     nodeRects
-      .attr('fill-opacity', nd => connIds.has(nd.id) ? 0.95 : 0.12)
-      .attr('filter', nd => connIds.has(nd.id) ? 'url(#sk-glow)' : null);
+      .attr('fill-opacity', nd => connIds.has(nd.id) ? 1.0 : 0.12)
+      .attr('filter', nd => connIds.has(nd.id) ? 'url(#sk-glow-strong)' : null);
+    skLabels
+      .attr('opacity', nd => connIds.has(nd.id) ? ((nd.y1 - nd.y0) >= 9 ? 1 : 0) : 0.06);
   }
   function resetSkHighlight() {
+    lockedConnIds = null;
     linkPaths
       .attr('stroke-opacity', 1)
       .attr('stroke', d => `url(#${gradId(d.target)})`);
-    nodeRects.attr('fill-opacity', 0.82).attr('filter', null);
+    nodeRects.attr('fill-opacity', 0.82).attr('filter', null).attr('stroke', 'none').attr('stroke-width', 0);
+    skLabels.attr('opacity', nd => (nd.y1 - nd.y0) >= 9 ? 1 : 0);
   }
 
   // ── Hover & click ──
   nodeRects
     .on('mouseover', (event, d) => {
-      showTooltip(d, event);
-      if (!lockedHighlight) applySkHighlight(d);
+      if (!lockedHighlight || (lockedConnIds && lockedConnIds.has(d.id))) {
+        showTooltip(d, event);
+      }
+      if (!lockedHighlight) {
+        applySkHighlight(d);
+      } else if (lockedConnIds && lockedConnIds.has(d.id)) {
+        nodeRects.filter(nd => nd.id === d.id)
+          .attr('stroke', '#fff')
+          .attr('stroke-width', 1.5)
+          .attr('stroke-opacity', 0.6);
+      }
     })
     .on('mousemove', event => positionTooltip(event))
-    .on('mouseout', () => {
+    .on('mouseout', (event, d) => {
       hideTooltip();
-      if (!lockedHighlight) resetSkHighlight();
+      if (!lockedHighlight) {
+        resetSkHighlight();
+      } else {
+        nodeRects.filter(nd => nd.id === d.id)
+          .attr('stroke', 'none')
+          .attr('stroke-width', 0);
+      }
     })
     .on('click', (event, d) => {
       event.stopPropagation();
