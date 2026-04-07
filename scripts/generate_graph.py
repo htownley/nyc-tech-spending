@@ -255,27 +255,21 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     flex-wrap: wrap;
   }
 
-  .filter-btn {
+  #filter-select {
     font-family: 'DM Mono', monospace;
     font-size: 11px;
     letter-spacing: 0.5px;
-    padding: 5px 12px;
+    padding: 5px 10px;
     border: 1px solid rgba(255,255,255,0.15);
     background: rgba(8,12,20,0.8);
-    color: #8a9ab5;
+    color: #c8d4e8;
     cursor: pointer;
     border-radius: 3px;
-    transition: all 0.15s;
-    text-transform: uppercase;
+    outline: none;
+    transition: border-color 0.15s;
   }
-
-  .filter-btn:hover { border-color: rgba(232,160,48,0.5); color: #e8a030; }
-
-  .filter-btn.active {
-    background: rgba(232,160,48,0.15);
-    border-color: #e8a030;
-    color: #e8a030;
-  }
+  #filter-select:hover { border-color: rgba(232,160,48,0.5); }
+  #filter-select option { background: #0f1822; color: #c8d4e8; }
 
   #slider-wrap {
     display: flex;
@@ -328,6 +322,55 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   }
 
   #threshold-label { color: #e8a030; min-width: 52px; font-size: 11px; }
+
+  #search-wrap {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+  }
+  #search-input {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.15);
+    color: #c8d4e8;
+    padding: 4px 10px;
+    border-radius: 3px;
+    width: 160px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  #search-input::placeholder { color: #4a5a6a; }
+  #search-input:focus { border-color: rgba(90,159,212,0.5); }
+  #search-dropdown {
+    display: none;
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    width: 260px;
+    background: #0f1822;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 3px;
+    z-index: 100;
+    max-height: 240px;
+    overflow-y: auto;
+  }
+  .search-result {
+    padding: 6px 10px;
+    font-size: 11px;
+    color: #c8d4e8;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+  }
+  .search-result:hover { background: rgba(255,255,255,0.06); }
+  .search-result-type {
+    font-size: 9px;
+    color: #4a5a6a;
+    flex-shrink: 0;
+  }
 
   #legend {
     position: fixed;
@@ -424,12 +467,18 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   <div id="ui-sep"></div>
 
   <div id="controls">
-    <button class="filter-btn active" data-filter="all">All</button>
-    <button class="filter-btn" data-filter="digital">Digital</button>
-    <button class="filter-btn" data-filter="mixed">Mixed</button>
-    <button class="filter-btn" data-filter="hardware">Hardware</button>
-    <button class="filter-btn" data-filter="nontechnical">Nontechnical</button>
-    <button class="filter-btn" data-filter="internal">Internal</button>
+    <select id="filter-select">
+      <option value="all">All</option>
+      <option value="digital">Digital</option>
+      <option value="mixed">Mixed</option>
+      <option value="hardware">Hardware</option>
+      <option value="nontechnical">Nontechnical</option>
+      <option value="internal">Internal</option>
+    </select>
+    <div id="search-wrap">
+      <input type="text" id="search-input" placeholder="Search vendors &amp; agencies&hellip;" autocomplete="off">
+      <div id="search-dropdown"></div>
+    </div>
     <button id="oti-toggle">OTI only</button>
     <div id="slider-wrap">
       Min spend:
@@ -520,6 +569,7 @@ let currentView = 'network';
 let isOtiMode = false;
 let pinnedNodes = new Set();
 let lockedHighlight = null;  // node id currently click-locked, or null
+let netNodes = [];           // live simulation node objects (have .x/.y after tick)
 
 const OTI_AGENCY = 'Department of Information Technology and Telecommunications';
 
@@ -635,12 +685,13 @@ feMerge.append('feMergeNode').attr('in', 'blur');
 feMerge.append('feMergeNode').attr('in', 'SourceGraphic');
 
 const zoomGroup = svg.append('g').attr('id', 'zoom-group');
-svg.call(d3.zoom().scaleExtent([0.1, 8]).on('zoom', e => {
+const zoom = d3.zoom().scaleExtent([0.1, 8]).on('zoom', e => {
   zoomGroup.attr('transform', e.transform);
   zoomGroup.selectAll('.node-label').attr('opacity', e.transform.k > 2.5 ? 1 : 0);
-}));
+});
+svg.call(zoom);
 
-let linkSel, nodeSel;
+let linkSel, nodeSel, nodeGroup;
 
 function buildGraph() {
   if (simulation) simulation.stop();
@@ -656,6 +707,7 @@ function buildGraph() {
     .force('collision', d3.forceCollide(d => (d.type === 'vendor' ? nodeRadius(activeSpend(d)) : d.radius) + 4))
     .force('center',    d3.forceCenter(W / 2, H / 2));
 
+  netNodes = nodes;
   nodes.forEach(n => { if (pinnedNodes.has(n.id)) { n.fx = n.x; n.fy = n.y; } });
 
   linkSel = zoomGroup.append('g').attr('class', 'links')
@@ -663,7 +715,7 @@ function buildGraph() {
     .attr('stroke', 'rgba(255,255,255,0.06)')
     .attr('stroke-width', 1);
 
-  const nodeGroup = zoomGroup.append('g').attr('class', 'nodes')
+  nodeGroup = zoomGroup.append('g').attr('class', 'nodes')
     .selectAll('g').data(nodes).join('g')
     .attr('class', 'node-group')
     .call(d3.drag()
@@ -932,6 +984,12 @@ function buildSankey() {
       hideTooltip(); resetSkHighlight();
     }
   });
+
+  // Apply lock if search selected a node before this build
+  if (lockedHighlight) {
+    const locked = graph.nodes.find(n => n.id === lockedHighlight);
+    if (locked) { showTooltip(locked, { clientX: W / 2, clientY: 80 }); applySkHighlight(locked); }
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -964,14 +1022,11 @@ document.querySelectorAll('.view-btn').forEach(btn => {
 });
 
 // ─── Filter / slider controls ─────────────────────────────────────────────────
-document.querySelectorAll('.filter-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
-    activeFilter = btn.dataset.filter;
-    pinnedNodes.clear();
-    currentView === 'network' ? buildGraph() : buildSankey();
-  });
+document.getElementById('filter-select').addEventListener('change', function() {
+  activeFilter = this.value;
+  pinnedNodes.clear();
+  lockedHighlight = null;
+  currentView === 'network' ? buildGraph() : buildSankey();
 });
 
 const slider = document.getElementById('threshold-slider');
@@ -999,6 +1054,75 @@ document.getElementById('oti-toggle').addEventListener('click', function() {
   updateSliderLabel();
   pinnedNodes.clear();
   currentView === 'network' ? buildGraph() : buildSankey();
+});
+
+// ─── Search ───────────────────────────────────────────────────────────────────
+const searchInput    = document.getElementById('search-input');
+const searchDropdown = document.getElementById('search-dropdown');
+
+function selectSearchResult(nodeId) {
+  searchInput.value = nodeId;
+  searchDropdown.style.display = 'none';
+
+  const d = RAW_NODES.find(n => n.id === nodeId);
+  if (!d) return;
+
+  lockedHighlight = nodeId;
+
+  if (currentView === 'network') {
+    if (nodeGroup) {
+      showTooltip(d, { clientX: W / 2, clientY: 80 });
+      highlightNet(d, nodeGroup, linkSel);
+    }
+  } else {
+    // Rebuild Sankey — lockedHighlight is already set, buildSankey will apply highlight
+    buildSankey();
+  }
+}
+
+searchInput.addEventListener('input', () => {
+  const q = searchInput.value.trim().toLowerCase();
+  if (!q) { searchDropdown.style.display = 'none'; return; }
+
+  const matches = RAW_NODES
+    .filter(n => n.id.toLowerCase().includes(q))
+    .sort((a, b) => {
+      // Exact start matches first, then by spending descending
+      const aStarts = a.id.toLowerCase().startsWith(q) ? 0 : 1;
+      const bStarts = b.id.toLowerCase().startsWith(q) ? 0 : 1;
+      return aStarts - bStarts || (b.fy2025_spending - a.fy2025_spending);
+    })
+    .slice(0, 10);
+
+  if (!matches.length) { searchDropdown.style.display = 'none'; return; }
+
+  searchDropdown.innerHTML = matches.map(n => {
+    const typeLabel = n.type === 'agency' ? 'agency' : n.classification.toLowerCase();
+    const spendM = n.type === 'vendor' ? ` · $${(n.fy2025_spending/1e6).toFixed(0)}M` : '';
+    return `<div class="search-result" data-id="${n.id.replace(/"/g, '&quot;')}">
+      <span>${n.id}</span>
+      <span class="search-result-type">${typeLabel}${spendM}</span>
+    </div>`;
+  }).join('');
+  searchDropdown.style.display = 'block';
+
+  searchDropdown.querySelectorAll('.search-result').forEach(el => {
+    el.addEventListener('click', () => selectSearchResult(el.dataset.id));
+  });
+});
+
+searchInput.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { searchInput.value = ''; searchDropdown.style.display = 'none'; }
+  if (e.key === 'Enter') {
+    const first = searchDropdown.querySelector('.search-result');
+    if (first) selectSearchResult(first.dataset.id);
+  }
+});
+
+document.addEventListener('click', e => {
+  if (!document.getElementById('search-wrap').contains(e.target)) {
+    searchDropdown.style.display = 'none';
+  }
 });
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
