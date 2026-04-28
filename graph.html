@@ -312,8 +312,8 @@
   <div id="title">NYC TECH SPENDING</div>
 
   <div id="view-toggle">
-    <button class="view-btn active" data-view="network">Network</button>
-    <button class="view-btn" data-view="sankey">Sankey</button>
+    <button class="view-btn" data-view="network">Network</button>
+    <button class="view-btn active" data-view="sankey">Sankey</button>
   </div>
 
   <div id="ui-sep"></div>
@@ -417,7 +417,7 @@ const RAW_LINKS = [{"source": "22ND CENTURY TECHNOLOGIES INC", "target": "Depart
 // ─── State ────────────────────────────────────────────────────────────────────
 let activeFilter = 'all';
 let thresholdM = 0;
-let currentView = 'network';
+let currentView = 'sankey';
 let isOtiMode = false;
 let pinnedNodes = new Set();
 let lockedHighlight = null;  // node id currently click-locked, or null
