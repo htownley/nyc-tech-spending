@@ -1,0 +1,39 @@
+# Raw data (large files, reproducible via scripts)
+data/raw/
+
+# Download progress files
+download_progress*.json
+progress/
+
+# Archive/legacy files
+archive/
+data/archive/
+scripts/archive/
+
+# Working files and intermediate outputs
+notes/*.csv
+top_100_codes.txt
+data/outputs/confirmed_non_digital_budget_codes.csv
+
+# Python
+*.pyc
+__pycache__/
+*.egg-info/
+.eggs/
+dist/
+build/
+venv/
+.venv/
+env/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.claude/
+*.png
