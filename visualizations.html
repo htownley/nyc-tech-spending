@@ -409,11 +409,11 @@
 <!-- 6. COMPARISON -->
 <div class="section reveal" data-number="06">
   <div class="section-head">
-    <h2>Digital Service Team Budgets &mdash; Reference</h2>
-    <p class="deck">Annual budgets of selected U.S. state and federal digital service teams.</p>
+    <h2>NYC Digital Vendor Spending vs OTI Budget, FY2025</h2>
+    <p class="deck">Annual NYC spending on classified digital vendors compared with the NYC Office of Technology &amp; Innovation's total budget.</p>
   </div>
   <div id="comparison-chart" class="chart-wrap"></div>
-  <div class="source-line">Budget figures from published reports. NJ Office of Innovation, MA Digital Service, USDS 2020 Impact Report.</div>
+  <div class="source-line">Source: Checkbook NYC, FY2025 vendor spending; NYC OMB published OTI budget.</div>
 </div>
 
 <!-- 7. TREEMAP -->
@@ -839,10 +839,6 @@ const YEARS = ['FY16','FY17','FY18','FY19','FY20','FY21','FY22','FY23','FY24','F
   const items = [
     { name: "NYC digital vendor<br>spending (FY2025)", value: 769, color: C.vermillion },
     { name: 'OTI annual<br>budget', value: 800, color: C.gray },
-    { name: 'USDS savings<br>(2020, 1 yr)', value: 3500, color: C.green },
-    { name: 'NJ Office of<br>Innovation', value: 15, color: C.teal },
-    { name: 'MA Digital<br>Service', value: 12, color: C.slate },
-    { name: 'USDS budget<br>(~200 staff)', value: 40, color: C.ochre },
   ];
 
   const data = [{
@@ -873,15 +869,6 @@ const YEARS = ['FY16','FY17','FY18','FY19','FY20','FY21','FY22','FY23','FY24','F
     },
     bargap: 0.4,
     showlegend: false,
-    annotations: [{
-      x: 'NJ Office of<br>Innovation',
-      y: Math.log10(15) + 0.55,
-      text: '5 people, 6 months<br>→ $780K annual savings',
-      showarrow: true, arrowhead: 0, arrowcolor: C.teal, arrowwidth: 1.5,
-      ax: 0, ay: -35,
-      font: { size: 10.5, color: C.inkSec, family: FONT },
-      bgcolor: 'rgba(255,255,255,0.92)', borderpad: 4,
-    }],
   };
 
   Plotly.newPlot('comparison-chart', data, layout, CFG);
