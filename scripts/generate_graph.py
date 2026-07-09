@@ -2,14 +2,19 @@
 """Generate force-directed graph + Sankey visualization of NYC tech spending."""
 
 import json
+import sys
 from pathlib import Path
 
 import pandas as pd
+
+sys.path.insert(0, str(Path(__file__).parent))
+from analyze_passthrough import attribute
 
 PROJECT_ROOT = Path(__file__).parent.parent
 CSV_PATH     = PROJECT_ROOT / "data" / "outputs" / "digital_services_vendors.csv"
 OTI_CSV_PATH = PROJECT_ROOT / "data" / "outputs" / "oti_vendors_for_classification.csv"
 RAW_DIR      = PROJECT_ROOT / "data" / "raw"
+RESELLER_CSV = PROJECT_ROOT / "data" / "raw" / "reseller_purposes.csv"
 OUTPUT_PATH  = PROJECT_ROOT / "graph.html"
 
 PRIVACY_PLACEHOLDER = "N/A (PRIVACY/SECURITY)"
@@ -88,6 +93,69 @@ def build_graph_data():
         )
         per_year_agg[year] = agg[agg["spend"] > 0]
         print(f"    → {len(per_year_agg[year])} vendor-agency pairs")
+
+    # ── Step 2b: pass-through maker attribution (reseller → maker) ──────────
+    # Reseller checks carry purpose text naming the underlying product;
+    # attribute() maps purposes to makers (keyword pass + judgment overrides).
+    # Unattributed rows are dropped here: each reseller's unidentified remainder
+    # is computed per period against its viz total, so every column conserves $.
+    maker_by_year = None
+    maker_by_year_oti = None
+    reseller_names = set()
+    if RESELLER_CSV.exists():
+        rp = pd.read_csv(RESELLER_CSV)
+        rp["check_amount"] = pd.to_numeric(rp["check_amount"], errors="coerce").fillna(0)
+        attr_map = {p: attribute(p)[0] for p in rp["contract_purpose"].fillna("").unique()}
+        rp["maker"] = rp["contract_purpose"].fillna("").map(attr_map)
+        reseller_names = set(rp["payee_name"].unique())
+        att = rp[rp["maker"] != "Unattributed"]
+        maker_by_year = (
+            att.groupby(["payee_name", "maker", "fiscal_year"])["check_amount"]
+            .sum().reset_index()
+        )
+        att_oti = att[att["agency"] == OTI_AGENCY]
+        maker_by_year_oti = (
+            att_oti.groupby(["payee_name", "maker", "fiscal_year"])["check_amount"]
+            .sum().reset_index()
+        )
+        print(f"Pass-through makers: {len(reseller_names)} resellers → "
+              f"{maker_by_year['maker'].nunique()} makers")
+    else:
+        print("No reseller_purposes.csv — skipping maker layer")
+
+    # Maker classifications (human-reasoned, reviewable): column 3 uses the
+    # same taxonomy and palette as column 2. Any attributed maker missing
+    # from the CSV renders gray — the warning below flags it for review.
+    maker_class = {}
+    mc_path = PROJECT_ROOT / "data" / "outputs" / "maker_classifications.csv"
+    if mc_path.exists():
+        mc = pd.read_csv(mc_path)
+        maker_class = dict(zip(mc["maker"], mc["classification"]))
+    if maker_by_year is not None:
+        known = set(maker_class) | {"Multiple makers"}
+        missing = sorted(set(maker_by_year["maker"].unique()) - known)
+        if missing:
+            print(f"⚠ {len(missing)} attributed makers missing from "
+                  f"maker_classifications.csv (will render gray): {missing}")
+
+    # Vendors that are themselves the maker, under the maker dictionary's
+    # canonical name — their direct spend merges into the same column-3 node
+    # as their pass-through spend. Everything else that isn't a reseller flows
+    # through to a maker named after itself.
+    VENDOR_MAKER_IDENTITY = {
+        "MICROSOFT CORPORATION": "Microsoft",
+        "INTERNATIONAL BUSINESS MACHINES CORP": "IBM",
+        "Motorola Solutions, Inc": "Motorola",
+        "MOTOROLA SOLUTIONS CONNECTIVITY INC": "Motorola",
+        "MTX GROUP INC": "MTX Group",
+        "MTX B2B SOLUTIONS LLC": "MTX Group",
+        "NICE SYSTEMS INCORPORATED": "NICE Systems",
+        "SAS INSTITUTE INC.": "SAS Institute",
+        "WORKDAY INC": "Workday",
+        "DELOITTE CONSULTING LLP": "Deloitte",
+        # Deliberately NOT mapped: GENESYS CONSULTING SERVICES INC (an Albany
+        # IT staffing firm, unrelated to Genesys the CX platform company)
+    }
 
     # ── Step 3: define periods ───────────────────────────────────────────────
     periods = {}
@@ -180,8 +248,68 @@ def build_graph_data():
                 node["agency_count"] = vendor_agency_counts.get(node["id"], 0)
                 vendor_count += 1
 
-        all_period_data[period_name] = {"nodes": nodes, "links": links}
-        print(f"  {period_name}: {vendor_count} vendors, {agency_count} agencies, {len(links)} links")
+        # Maker links: every vendor's full spend flows to column 3 so all three
+        # columns total identically. Resellers decompose into attributed makers
+        # plus an "Unidentified purchases" remainder; everyone else flows
+        # through to a maker named after itself (or its canonical maker name).
+        def build_maker_links(table, spend_key):
+            reseller_period = {}
+            if table is not None:
+                mk = table[table["fiscal_year"].isin(period_years)]
+                grouped = mk.groupby(["payee_name", "maker"])["check_amount"].sum()
+                for (payee, maker), amt in grouped.items():
+                    reseller_period.setdefault(payee, []).append([maker, float(amt)])
+
+            out = []
+            for node in nodes:
+                if node["type"] != "vendor":
+                    continue
+                total = node[spend_key]
+                if total <= 0.01:
+                    continue
+                vname = node["id"]
+                if vname in reseller_names:
+                    flows = reseller_period.get(vname, [])
+                    attributed = sum(a for _, a in flows)
+                    if attributed > total and attributed > 0:
+                        # Small drift between the raw download and the reseller
+                        # pull (late records) — scale down to conserve totals
+                        flows = [[m, a * total / attributed] for m, a in flows]
+                        attributed = total
+                    for maker, amt in flows:
+                        if amt > 0.01:
+                            out.append({"source": vname, "target": maker,
+                                        "spend": round(amt, 2), "self": False})
+                    remainder = total - attributed
+                    if remainder > 0.01:
+                        out.append({"source": vname, "target": "Unidentified purchases",
+                                    "spend": round(remainder, 2), "self": False})
+                else:
+                    maker = VENDOR_MAKER_IDENTITY.get(vname, vname)
+                    out.append({"source": vname, "target": maker,
+                                "spend": round(total, 2), "self": True})
+
+            # Conservation invariant: per vendor, outflow == column-2 total
+            outflow = {}
+            for l in out:
+                outflow[l["source"]] = outflow.get(l["source"], 0) + l["spend"]
+            for node in nodes:
+                if node["type"] == "vendor" and node[spend_key] > 0.01:
+                    diff = abs(outflow.get(node["id"], 0) - node[spend_key])
+                    assert diff <= 1.0, (
+                        f"{period_name} {node['id']}: maker outflow off by ${diff:,.2f}")
+            return out
+
+        maker_links = build_maker_links(maker_by_year, "spending")
+        maker_links_oti = build_maker_links(maker_by_year_oti, "oti_spending")
+
+        all_period_data[period_name] = {
+            "nodes": nodes, "links": links,
+            "maker_links": maker_links, "maker_links_oti": maker_links_oti,
+        }
+        print(f"  {period_name}: {vendor_count} vendors, {agency_count} agencies, "
+              f"{len(links)} links, {len(maker_links)} maker links "
+              f"({len(maker_links_oti)} OTI)")
 
     # ── Step 5: build timeseries data (vendor → year → spend) ────────────────
     timeseries = {}
@@ -209,7 +337,52 @@ def build_graph_data():
 
     print(f"Timeseries: {len(timeseries)} vendors across {len(years)} years")
 
-    return all_period_data, list(periods.keys()), timeseries, years
+    # ── Step 5b: maker total series (direct + purpose-verified pass-through) ─
+    # One extra Trends line per attributed maker: direct vendor payments plus
+    # reseller checks whose purpose text names the maker. Unidentified reseller
+    # spend and multi-maker bundles are excluded — verified dollars only.
+    if maker_by_year is not None:
+        mk_y = maker_by_year[maker_by_year["maker"] != "Multiple makers"]
+        attr_yearly = mk_y.groupby(["maker", "fiscal_year"])["check_amount"].sum()
+        attr_yearly_oti = maker_by_year_oti[
+            maker_by_year_oti["maker"] != "Multiple makers"
+        ].groupby(["maker", "fiscal_year"])["check_amount"].sum()
+
+        identity_by_maker = {}
+        for vend, mk in VENDOR_MAKER_IDENTITY.items():
+            identity_by_maker.setdefault(mk, []).append(vend)
+
+        n_totals = 0
+        for m in sorted({m for m, _ in attr_yearly.index}):
+            direct_vendors = [v for v in identity_by_maker.get(m, []) if v in timeseries]
+            yearly, oti_yearly = {}, {}
+            for yr in years:
+                tot = float(attr_yearly.get((m, yr), 0.0))
+                tot += sum(timeseries[v]["yearly"].get(yr, 0) for v in direct_vendors)
+                if tot > 0:
+                    yearly[yr] = round(tot, 2)
+                oti = float(attr_yearly_oti.get((m, yr), 0.0))
+                oti += sum(timeseries[v]["oti_yearly"].get(yr, 0) for v in direct_vendors)
+                if oti > 0:
+                    oti_yearly[yr] = round(oti, 2)
+            if not yearly:
+                continue
+            name = f"{m} (incl. pass-through)"
+            timeseries[name] = {
+                "classification": maker_class.get(m, "Mixed"),
+                "description": "Direct vendor payments plus purpose-verified reseller "
+                               "pass-through. Unidentified reseller spend excluded.",
+                "yearly": yearly,
+                "oti_yearly": oti_yearly,
+                "maker_total": True,
+                "paired": direct_vendors,
+            }
+            for v in direct_vendors:
+                timeseries[v]["paired"] = [name]
+            n_totals += 1
+        print(f"Maker total series: {n_totals} added to Trends")
+
+    return all_period_data, list(periods.keys()), timeseries, years, maker_class
 
 
 HTML_TEMPLATE = """<!DOCTYPE html>
@@ -347,7 +520,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     letter-spacing: 0.5px;
   }
 
-  #oti-toggle {
+  #oti-toggle, #maker-toggle {
     font-family: 'DM Mono', monospace;
     font-size: 11px;
     background: rgba(255,255,255,0.04);
@@ -362,6 +535,13 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   }
   #oti-toggle:hover { border-color: rgba(90,159,212,0.5); color: #5a9fd4; }
   #oti-toggle.active {
+    background: rgba(90,159,212,0.15);
+    border-color: #5a9fd4;
+    color: #5a9fd4;
+  }
+  #maker-toggle { display: none; }
+  #maker-toggle:hover { border-color: rgba(90,159,212,0.5); color: #5a9fd4; }
+  #maker-toggle.active {
     background: rgba(90,159,212,0.15);
     border-color: #5a9fd4;
     color: #5a9fd4;
@@ -547,6 +727,13 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   .tv-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 
   /* Sankey-specific */
+  .sk-label {
+    paint-order: stroke;
+    stroke: #080c14;
+    stroke-width: 2.5px;
+    stroke-linejoin: round;
+  }
+
   .sk-label { pointer-events: none; }
   #sankey-hint {
     position: fixed;
@@ -589,6 +776,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       <div id="search-dropdown"></div>
     </div>
     <button id="oti-toggle">OTI only</button>
+    <button id="maker-toggle" class="active">Makers: on</button>
     <div id="slider-wrap">
       Min spend:
       <input type="range" id="threshold-slider" min="0" max="100" value="0" step="1">
@@ -631,6 +819,12 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     <div class="legend-dot" style="width:12px;height:12px;background:rgba(90,159,212,0.06);border:1.5px solid #5a9fd4;box-shadow:0 0 6px rgba(90,159,212,0.4)"></div>
     Agency
   </div>
+  <div id="legend-maker-group" style="display:none">
+    <div class="legend-item">
+      <div class="legend-dot" style="width:12px;height:12px;background:#5a6472;box-shadow:0 0 6px rgba(90,100,114,0.4)"></div>
+      Unidentified / unattributable
+    </div>
+  </div>
   <div class="legend-item" id="legend-size-note" style="margin-top:4px;border-top:1px solid rgba(255,255,255,0.06);padding-top:6px">
     Node size &#8733; period spending
   </div>
@@ -656,6 +850,8 @@ const PERIOD_DATA = __PERIOD_DATA__;
 const PERIOD_KEYS = __PERIOD_KEYS__;
 const TIMESERIES = __TIMESERIES_DATA__;
 const ALL_YEARS = __ALL_YEARS__;
+// Maker → vendor-taxonomy classification (from data/outputs/maker_classifications.csv)
+const MAKER_CLASS = __MAKER_CLASS__;
 
 let currentPeriod = PERIOD_KEYS[PERIOD_KEYS.length - 1]; // default to latest single year
 // Pick latest single FY as default (last key before multi-year entries)
@@ -689,15 +885,24 @@ const VENDOR_STROKES = {
   Nontechnical: 'rgba(74,154,114,0.3)',
   Internal:     'rgba(90,122,138,0.3)',
 };
-function nodeColor(d)  { return d.type === 'agency' ? '#5a9fd4' : (VENDOR_COLORS[d.classification]  || '#d4624a'); }
+// Makers use the same taxonomy palette as vendors. Gray is reserved for
+// "we can't say": unidentified purchases, multi-maker bundles, slider rollup.
+const MAKER_GRAY = '#5a6472';
+function nodeColor(d)  {
+  if (d.type === 'agency') return '#5a9fd4';
+  if (d.type === 'maker') {
+    return VENDOR_COLORS[d.classification] || MAKER_GRAY;
+  }
+  return VENDOR_COLORS[d.classification] || '#d4624a';
+}
 function nodeStroke(d) { return d.type === 'agency' ? '#5a9fd4' : (VENDOR_STROKES[d.classification] || 'rgba(212,98,74,0.3)'); }
-function gradId(d)     { return 'sk-grad-' + (d.classification || 'mixed').toLowerCase().replace(/[^a-z]/g, ''); }
 
 // ─── State ────────────────────────────────────────────────────────────────────
 let activeFilter = 'all';
 let thresholdM = 0;
 let currentView = 'network';
 let isOtiMode = false;
+let showMakers = true;   // third sankey layer: reseller → underlying maker
 let pinnedNodes = new Set();
 let lockedHighlight = null;  // node id currently click-locked, or null
 let netNodes = [];           // live simulation node objects (have .x/.y after tick)
@@ -760,7 +965,35 @@ const ttName  = document.getElementById('tt-name');
 const ttBody  = document.getElementById('tt-body');
 
 function showTooltip(d, event) {
-  ttName.textContent = d.id;
+  ttName.textContent = d.label || d.id;
+  if (d.type === 'maker') {
+    ttName.className = 'tt-name';
+    ttName.style.color = nodeColor(d);
+    const fm = v => '$' + (v / 1e6).toFixed(1) + 'M';
+    const rows = [`<div class="tt-row">${currentPeriod} total: <span>${fm(d.spending)}</span></div>`];
+    if (d.direct_spend > 0) {
+      rows.push(`<div class="tt-row">Paid directly as vendor: <span>${fm(d.direct_spend)}</span></div>`);
+    }
+    if (d.via_spend > 0) {
+      rows.push(`<div class="tt-row">Via ${d.via_count} reseller${d.via_count > 1 ? 's' : ''}: <span>${fm(d.via_spend)}</span></div>`);
+    }
+    let note;
+    if (d.classification === 'unidentified') {
+      note = 'Reseller checks whose purpose text names no product/maker (mostly task orders & POs).';
+    } else if (d.classification === 'other') {
+      note = 'Makers whose total falls below the min-spend slider, rolled up so every dollar stays visible.';
+    } else if (d.via_spend > 0) {
+      note = 'Reseller-routed dollars are attributed from check purpose text; for that portion the maker is not the payee.';
+    } else {
+      note = 'This vendor is its own maker — spend flows through unchanged.';
+    }
+    ttBody.innerHTML = rows.join('') +
+      `<div class="tt-row" style="margin-top:5px;color:#5a6a80;font-size:11px">${note}</div>`;
+    positionTooltip(event);
+    tooltip.classList.add('visible');
+    return;
+  }
+  ttName.style.color = '';
   if (d.type === 'vendor') {
     const ttClass = { Digital: 'tt-type-vendor', Mixed: 'tt-type-mixed', Hardware: 'tt-type-hardware', Nontechnical: 'tt-type-nontechnical', Internal: 'tt-type-internal' };
     ttName.className = `tt-name ${ttClass[d.classification] || 'tt-type-mixed'}`;
@@ -950,8 +1183,24 @@ skMergeStrong.append('feMergeNode').attr('in', 'blur');
 skMergeStrong.append('feMergeNode').attr('in', 'SourceGraphic');
 skMerge.append('feMergeNode').attr('in', 'SourceGraphic');
 
+// Zoom/pan (same pattern as the network view) — lets small slices be
+// inspected and clicked. Label visibility relaxes as you zoom in.
+const skZoomGroup = skSvg.append('g').attr('id', 'sk-zoom-group');
+let skZoomK = 1;
+// Zoom floor at 100%; translateExtent keeps the chart from being dragged
+// offscreen (and makes panning a no-op until you're zoomed in).
+const skZoom = d3.zoom().scaleExtent([1, 8]).translateExtent([[0, 0], [W, H]]).on('zoom', e => {
+  skZoomGroup.attr('transform', e.transform);
+  skZoomK = e.transform.k;
+  if (!lockedHighlight) {
+    skSvg.selectAll('.sk-label')
+      .attr('opacity', d => (d.y1 - d.y0) * skZoomK >= 9 ? 1 : 0);
+  }
+});
+skSvg.call(skZoom);
+
 function buildSankey() {
-  skSvg.selectAll('.sk-layer').remove();
+  skZoomGroup.selectAll('.sk-layer').remove();
 
   const { visibleVendorIds } = getFilteredData();
 
@@ -997,6 +1246,64 @@ function buildSankey() {
     };
   });
 
+  // ── Third layer: vendor → maker. Every visible vendor's full spend flows
+  // on, so columns 2 and 3 total identically (and column 1 already equals 2).
+  if (showMakers) {
+    const mlKey = isOtiMode ? 'maker_links_oti' : 'maker_links';
+    const rawMakerLinks = (PERIOD_DATA[currentPeriod][mlKey] || [])
+      .filter(l => visibleVendorIds.has(l.source));
+
+    const vendorClassById = {};
+    vendorNodes.forEach(v => { vendorClassById[v.id] = v.classification; });
+
+    // First pass: per-maker totals (to decide slider rollup) + self classes
+    const preTotals = {}, selfClass = {};
+    rawMakerLinks.forEach(l => {
+      preTotals[l.target] = (preTotals[l.target] || 0) + l.spend;
+      if (l.self && !(l.target in selfClass)) selfClass[l.target] = vendorClassById[l.source];
+    });
+
+    // Makers below the min-spend slider roll up into one node instead of
+    // being dropped, so every dollar still lands in column 3.
+    const ROLLUP = 'Other makers (below slider)';
+    const merged = {};
+    rawMakerLinks.forEach(l => {
+      const tgt = preTotals[l.target] < thresholdM * 1e6 ? ROLLUP : l.target;
+      const key = l.source + '||' + tgt + '||' + (l.self ? 1 : 0);
+      if (!merged[key]) merged[key] = { source: l.source, target: tgt, spend: 0, self: l.self };
+      merged[key].spend += l.spend;
+    });
+
+    const makerAgg = {};
+    Object.values(merged).forEach(l => {
+      const a = makerAgg[l.target] || (makerAgg[l.target] = { total: 0, via: 0, direct: 0, sources: new Set() });
+      a.total += l.spend;
+      if (l.self) a.direct += l.spend;
+      else { a.via += l.spend; a.sources.add(l.source); }
+      sankeyLinks.push({ source: l.source, target: 'maker::' + l.target, value: l.spend / 1e6 });
+    });
+
+    Object.keys(makerAgg).forEach(name => {
+      const a = makerAgg[name];
+      let cls;
+      if (name === 'Unidentified purchases') cls = 'unidentified';
+      else if (name === 'Multiple makers')   cls = 'multi';
+      else if (name === ROLLUP)              cls = 'other';
+      else cls = MAKER_CLASS[name] || selfClass[name] || 'multi';
+      allNodes.push({
+        id: 'maker::' + name,
+        label: name,
+        type: 'maker',
+        classification: cls,
+        spending: a.total,
+        direct_spend: a.direct,
+        via_spend: a.via,
+        via_count: a.sources.size,
+        description: '',
+      });
+    });
+  }
+
   updateStats(allNodes, rawLinks);
 
   const ML = 230, MR = 240, MT = 52, MB = 24;
@@ -1004,7 +1311,9 @@ function buildSankey() {
   const sankey = d3.sankey()
     .nodeId(d => d.id)
     .nodeWidth(14)
-    .nodePadding(3)
+    // Zero layout padding: column height is purely Σspend, so all columns are
+    // exactly equal. Node separation comes from a hairline stroke instead.
+    .nodePadding(0)
     .extent([[ML, MT], [W - MR, H - MB]]);
 
   let graph;
@@ -1015,31 +1324,39 @@ function buildSankey() {
     return;
   }
 
-  // ── Gradient defs for bands (blue → vendor category color) ──
+  // ── Gradient defs for bands ──
+  // Each band fades source-node color → target-node color across the actual
+  // gap it spans, so colors hand off cleanly at every column. Gradients are
+  // cached per (column gap, color pair) — all links in a gap share x-extent.
   skDefs.selectAll('.sk-grad').remove();
-  [['sk-grad-digital', '#e8a030'], ['sk-grad-mixed', '#d4624a'],
-   ['sk-grad-hardware', '#7c6af0'], ['sk-grad-nontechnical', '#4a9a72'],
-   ['sk-grad-internal', '#5a7a8a']].forEach(([id, endColor]) => {
-    const g = skDefs.append('linearGradient').attr('class', 'sk-grad').attr('id', id)
-      .attr('gradientUnits', 'userSpaceOnUse')
-      .attr('x1', ML).attr('y1', 0).attr('x2', W - MR).attr('y2', 0);
-    g.append('stop').attr('offset', '0%').attr('stop-color', '#5a9fd4').attr('stop-opacity', 0.55);
-    g.append('stop').attr('offset', '100%').attr('stop-color', endColor).attr('stop-opacity', 0.55);
-  });
+  const gradCache = new Set();
+  function linkGradId(l) {
+    const sc = nodeColor(l.source), tc = nodeColor(l.target);
+    const id = 'skg' + l.source.depth + '-' + sc.slice(1) + '-' + tc.slice(1);
+    if (!gradCache.has(id)) {
+      gradCache.add(id);
+      const g = skDefs.append('linearGradient').attr('class', 'sk-grad').attr('id', id)
+        .attr('gradientUnits', 'userSpaceOnUse')
+        .attr('x1', l.source.x1).attr('y1', 0).attr('x2', l.target.x0).attr('y2', 0);
+      g.append('stop').attr('offset', '0%').attr('stop-color', sc).attr('stop-opacity', 0.55);
+      g.append('stop').attr('offset', '100%').attr('stop-color', tc).attr('stop-opacity', 0.55);
+    }
+    return id;
+  }
 
   // ── Draw bands ──
-  const linkLayer = skSvg.append('g').attr('class', 'sk-layer sk-links');
+  const linkLayer = skZoomGroup.append('g').attr('class', 'sk-layer sk-links');
   const linkPaths = linkLayer.selectAll('path')
     .data(graph.links)
     .join('path')
     .attr('d', d3.sankeyLinkHorizontal())
-    .attr('stroke', d => `url(#${gradId(d.target)})`)
+    .attr('stroke', d => `url(#${linkGradId(d)})`)
     .attr('stroke-width', d => Math.max(0.5, d.width))
     .attr('stroke-opacity', 1)
     .attr('fill', 'none');
 
   // ── Draw node rects ──
-  const nodeLayer = skSvg.append('g').attr('class', 'sk-layer sk-nodes');
+  const nodeLayer = skZoomGroup.append('g').attr('class', 'sk-layer sk-nodes');
   const nodeRects = nodeLayer.selectAll('rect')
     .data(graph.nodes)
     .join('rect')
@@ -1049,10 +1366,12 @@ function buildSankey() {
     .attr('height', d => Math.max(1, d.y1 - d.y0))
     .attr('fill',   d => d.type === 'agency' ? '#5a9fd4' : nodeColor(d))
     .attr('fill-opacity', 0.82)
+    .attr('stroke', '#080c14')
+    .attr('stroke-width', 0.5)
     .attr('rx', 1);
 
   // ── Draw labels ──
-  const labelLayer = skSvg.append('g').attr('class', 'sk-layer sk-labels');
+  const labelLayer = skZoomGroup.append('g').attr('class', 'sk-layer sk-labels');
   labelLayer.selectAll('text')
     .data(graph.nodes)
     .join('text')
@@ -1064,10 +1383,11 @@ function buildSankey() {
     .attr('font-family', 'DM Mono, monospace')
     .attr('font-size', '9px')
     .attr('fill', d => d.type === 'agency' ? '#5a9fd4' : nodeColor(d))
-    .attr('opacity', d => (d.y1 - d.y0) >= 9 ? 1 : 0)
+    .attr('opacity', d => (d.y1 - d.y0) * skZoomK >= 9 ? 1 : 0)
     .text(d => {
+      const name = d.label || d.id;
       const maxLen = d.type === 'agency' ? 32 : 26;
-      return d.id.length > maxLen ? d.id.substring(0, maxLen - 2) + '\u2026' : d.id;
+      return name.length > maxLen ? name.substring(0, maxLen - 2) + '\u2026' : name;
     });
 
   const skLabels = skSvg.selectAll('.sk-label');
@@ -1087,21 +1407,22 @@ function buildSankey() {
         (l.source.id === d.id || l.target.id === d.id) ? 1 : 0.04)
       .attr('stroke', l =>
         (l.source.id === d.id || l.target.id === d.id)
-          ? `url(#${gradId(l.target)})`
+          ? `url(#${linkGradId(l)})`
           : 'rgba(255,255,255,0.15)');
     nodeRects
       .attr('fill-opacity', nd => connIds.has(nd.id) ? 1.0 : 0.12)
       .attr('filter', nd => connIds.has(nd.id) ? 'url(#sk-glow-strong)' : null);
     skLabels
-      .attr('opacity', nd => connIds.has(nd.id) ? ((nd.y1 - nd.y0) >= 9 ? 1 : 0) : 0.06);
+      .attr('opacity', nd => connIds.has(nd.id) ? ((nd.y1 - nd.y0) * skZoomK >= 9 ? 1 : 0) : 0.06);
   }
   function resetSkHighlight() {
     lockedConnIds = null;
     linkPaths
       .attr('stroke-opacity', 1)
-      .attr('stroke', d => `url(#${gradId(d.target)})`);
-    nodeRects.attr('fill-opacity', 0.82).attr('filter', null).attr('stroke', 'none').attr('stroke-width', 0);
-    skLabels.attr('opacity', nd => (nd.y1 - nd.y0) >= 9 ? 1 : 0);
+      .attr('stroke', d => `url(#${linkGradId(d)})`);
+    nodeRects.attr('fill-opacity', 0.82).attr('filter', null)
+      .attr('stroke', '#080c14').attr('stroke-width', 0.5).attr('stroke-opacity', 1);
+    skLabels.attr('opacity', nd => (nd.y1 - nd.y0) * skZoomK >= 9 ? 1 : 0);
   }
 
   // ── Hover & click ──
@@ -1126,8 +1447,9 @@ function buildSankey() {
         resetSkHighlight();
       } else {
         nodeRects.filter(nd => nd.id === d.id)
-          .attr('stroke', 'none')
-          .attr('stroke-width', 0);
+          .attr('stroke', '#080c14')
+          .attr('stroke-width', 0.5)
+          .attr('stroke-opacity', 1);
       }
     })
     .on('click', (event, d) => {
@@ -1181,6 +1503,7 @@ function buildTrends() {
       classification: d.classification,
       yearly: d.yearly,
       oti_yearly: d.oti_yearly,
+      makerTotal: !!d.maker_total,
       maxSpend: Math.max(...Object.values(isOtiMode ? d.oti_yearly : d.yearly).map(v => v || 0)),
       totalSpend: Object.values(isOtiMode ? d.oti_yearly : d.yearly).reduce((a, b) => a + b, 0),
     }))
@@ -1260,6 +1583,8 @@ function buildTrends() {
       .attr('d', line)
       .attr('stroke', color)
       .attr('data-vendor', v.name);
+    // Maker totals (direct + verified pass-through) render dashed
+    if (v.makerTotal) path.attr('stroke-dasharray', '7,4');
 
     // Dots and value labels for highlighted lines
     if (isActive) {
@@ -1303,7 +1628,8 @@ function buildTrends() {
         ttBody.innerHTML = '<div class="tt-row">Type: <span>' + v.classification + '</span></div>'
           + '<div class="tt-row">Total: <span>$' + (v.totalSpend / 1e6).toFixed(1) + 'M</span></div>'
           + (latest ? '<div class="tt-row">FY' + latest + ': <span>$' + (latestVal / 1e6).toFixed(1) + 'M</span></div>' : '')
-          + '<div class="tt-row">Active years: <span>' + yearsActive + '/' + ALL_YEARS.length + '</span></div>';
+          + '<div class="tt-row">Active years: <span>' + yearsActive + '/' + ALL_YEARS.length + '</span></div>'
+          + (v.makerTotal ? '<div class="tt-row" style="margin-top:5px;color:#5a6a80;font-size:11px">Direct payments + purpose-verified reseller pass-through. Unidentified reseller spend excluded, so this is a floor.</div>' : '');
         positionTooltip(event);
         tooltip.classList.add('visible');
         applyTrendsHover(v.name);
@@ -1333,7 +1659,10 @@ function buildTrends() {
     const isActive = trendsHighlighted.has(v.name);
     const el = document.createElement('div');
     el.className = 'tv-item' + (isActive ? ' active' : '');
-    el.innerHTML = '<div class="tv-dot" style="background:' + color + (isActive ? '' : ';opacity:0.3') + '"></div>'
+    const dotStyle = v.makerTotal
+      ? 'background:transparent;border:2px solid ' + color + (isActive ? '' : ';opacity:0.3')
+      : 'background:' + color + (isActive ? '' : ';opacity:0.3');
+    el.innerHTML = '<div class="tv-dot" style="' + dotStyle + '"></div>'
       + '<span>' + (v.name.length > 28 ? v.name.substring(0, 26) + '\u2026' : v.name) + '</span>';
     el.addEventListener('click', () => {
       if (trendsHighlighted.has(v.name) && trendsHighlighted.size === 1) {
@@ -1397,9 +1726,13 @@ function switchView(view) {
   document.getElementById('trends-canvas').style.display  = view === 'trends'  ? '' : 'none';
   document.getElementById('legend').style.display         = view === 'trends'  ? 'none' : '';
   document.getElementById('trends-vendor-list').style.display = view === 'trends' ? 'block' : 'none';
+  // Stats reflect network/sankey builds and would sit on top of the trends list
+  document.getElementById('stats').style.display = view === 'trends' ? 'none' : '';
   document.getElementById('legend-size-note').style.display   = view === 'network' ? '' : 'none';
   document.getElementById('legend-sankey-note').style.display = view === 'sankey'  ? '' : 'none';
   document.getElementById('sankey-hint').style.display        = view === 'sankey'  ? 'block' : 'none';
+  document.getElementById('maker-toggle').style.display       = view === 'sankey'  ? '' : 'none';
+  document.getElementById('legend-maker-group').style.display = view === 'sankey' && showMakers ? '' : 'none';
   // Hide period picker and slider in trends (it shows all years)
   periodSelect.style.display = view === 'trends' ? 'none' : '';
   document.getElementById('slider-wrap').style.display = view === 'trends' ? 'none' : '';
@@ -1466,6 +1799,15 @@ slider.addEventListener('input', () => {
   rebuildCurrentView();
 });
 
+document.getElementById('maker-toggle').addEventListener('click', function() {
+  showMakers = !showMakers;
+  this.classList.toggle('active', showMakers);
+  this.textContent = 'Makers: ' + (showMakers ? 'on' : 'off');
+  document.getElementById('legend-maker-group').style.display = currentView === 'sankey' && showMakers ? '' : 'none';
+  lockedHighlight = null;
+  if (currentView === 'sankey') buildSankey();
+});
+
 document.getElementById('oti-toggle').addEventListener('click', function() {
   isOtiMode = !isOtiMode;
   this.classList.toggle('active', isOtiMode);
@@ -1486,10 +1828,12 @@ function selectSearchResult(nodeId) {
   searchDropdown.style.display = 'none';
 
   if (currentView === 'trends') {
-    // In trends, toggle the vendor highlight
+    // In trends, highlight the selection plus its paired series
+    // (direct vendor ↔ maker total), so e.g. "microsoft" shows both lines
     if (TIMESERIES[nodeId]) {
       trendsHighlighted.clear();
       trendsHighlighted.add(nodeId);
+      (TIMESERIES[nodeId].paired || []).forEach(p => trendsHighlighted.add(p));
       buildTrends();
     }
     return;
@@ -1569,24 +1913,26 @@ switchView('sankey');
 """
 
 
-def generate_html(all_period_data, period_keys, timeseries, all_years):
+def generate_html(all_period_data, period_keys, timeseries, all_years, maker_class):
     period_json = json.dumps(all_period_data)
     period_keys_json = json.dumps(period_keys)
     timeseries_json = json.dumps(timeseries)
     years_json = json.dumps(all_years)
+    maker_class_json = json.dumps(maker_class)
     return (
         HTML_TEMPLATE
         .replace("__PERIOD_DATA__", period_json)
         .replace("__PERIOD_KEYS__", period_keys_json)
         .replace("__TIMESERIES_DATA__", timeseries_json)
         .replace("__ALL_YEARS__", years_json)
+        .replace("__MAKER_CLASS__", maker_class_json)
     )
 
 
 def main():
     print(f"Reading {CSV_PATH}")
-    all_period_data, period_keys, timeseries, all_years = build_graph_data()
-    html = generate_html(all_period_data, period_keys, timeseries, all_years)
+    all_period_data, period_keys, timeseries, all_years, maker_class = build_graph_data()
+    html = generate_html(all_period_data, period_keys, timeseries, all_years, maker_class)
     OUTPUT_PATH.write_text(html, encoding="utf-8")
     print(f"Written: {OUTPUT_PATH}")
     print(f"File size: {OUTPUT_PATH.stat().st_size / 1024:.1f} KB")
