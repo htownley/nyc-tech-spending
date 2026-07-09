@@ -130,7 +130,10 @@ def build_graph_data():
     mc_path = PROJECT_ROOT / "data" / "outputs" / "maker_classifications.csv"
     if mc_path.exists():
         mc = pd.read_csv(mc_path)
-        maker_class = dict(zip(mc["maker"], mc["classification"]))
+        maker_class = {
+            row["maker"]: {"c": row["classification"], "r": row["rationale"]}
+            for _, row in mc.iterrows()
+        }
     if maker_by_year is not None:
         known = set(maker_class) | {"Multiple makers"}
         missing = sorted(set(maker_by_year["maker"].unique()) - known)
@@ -369,7 +372,7 @@ def build_graph_data():
                 continue
             name = f"{m} (incl. pass-through)"
             timeseries[name] = {
-                "classification": maker_class.get(m, "Mixed"),
+                "classification": maker_class.get(m, {}).get("c", "Mixed"),
                 "description": "Direct vendor payments plus purpose-verified reseller "
                                "pass-through. Unidentified reseller spend excluded.",
                 "yearly": yearly,
@@ -885,6 +888,14 @@ const VENDOR_STROKES = {
   Nontechnical: 'rgba(74,154,114,0.3)',
   Internal:     'rgba(90,122,138,0.3)',
 };
+// Dollar formatter: billions get $X.XXB, millions $X.XM, small values $XK
+function fmtUSD(v) {
+  if (v >= 1e9) return '$' + (v / 1e9).toFixed(2) + 'B';
+  if (v >= 1e6) return '$' + (v / 1e6).toFixed(1) + 'M';
+  if (v > 0)    return '$' + Math.round(v / 1e3) + 'K';
+  return '$0';
+}
+
 // Makers use the same taxonomy palette as vendors. Gray is reserved for
 // "we can't say": unidentified purchases, multi-maker bundles, slider rollup.
 const MAKER_GRAY = '#5a6472';
@@ -969,7 +980,7 @@ function showTooltip(d, event) {
   if (d.type === 'maker') {
     ttName.className = 'tt-name';
     ttName.style.color = nodeColor(d);
-    const fm = v => '$' + (v / 1e6).toFixed(1) + 'M';
+    const fm = fmtUSD;
     const rows = [`<div class="tt-row">${currentPeriod} total: <span>${fm(d.spending)}</span></div>`];
     if (d.direct_spend > 0) {
       rows.push(`<div class="tt-row">Paid directly as vendor: <span>${fm(d.direct_spend)}</span></div>`);
@@ -987,8 +998,9 @@ function showTooltip(d, event) {
     } else {
       note = 'This vendor is its own maker — spend flows through unchanged.';
     }
-    ttBody.innerHTML = rows.join('') +
-      `<div class="tt-row" style="margin-top:5px;color:#5a6a80;font-size:11px">${note}</div>`;
+    ttBody.innerHTML = rows.join('')
+      + (d.description ? `<div class="tt-row" style="margin-top:5px;color:#8a9ab5;font-size:11px">${String(d.description).substring(0, 120)}</div>` : '')
+      + `<div class="tt-row" style="margin-top:5px;color:#5a6a80;font-size:11px">${note}</div>`;
     positionTooltip(event);
     tooltip.classList.add('visible');
     return;
@@ -998,21 +1010,19 @@ function showTooltip(d, event) {
     const ttClass = { Digital: 'tt-type-vendor', Mixed: 'tt-type-mixed', Hardware: 'tt-type-hardware', Nontechnical: 'tt-type-nontechnical', Internal: 'tt-type-internal' };
     ttName.className = `tt-name ${ttClass[d.classification] || 'tt-type-mixed'}`;
     const spend = activeSpend(d);
-    const m = (spend / 1e6).toFixed(1);
     const spendLabel = isOtiMode ? 'OTI Spend' : currentPeriod + ' Spend';
     ttBody.innerHTML = `
       <div class="tt-row">Type: <span>${d.classification}</span></div>
-      <div class="tt-row">${spendLabel}: <span>$${m}M</span></div>
+      <div class="tt-row">${spendLabel}: <span>${fmtUSD(spend)}</span></div>
       <div class="tt-row">Agencies served: <span>${d.agency_count}</span></div>
       ${d.description ? `<div class="tt-row" style="margin-top:5px;color:#5a6a80;font-size:11px">${d.description.substring(0,120)}${d.description.length>120?'&hellip;':''}</div>` : ''}
     `;
   } else {
     ttName.className = 'tt-name tt-type-agency';
-    const estM = d._estSpend ? (d._estSpend / 1e6).toFixed(1) : null;
     ttBody.innerHTML = `
       <div class="tt-row">Agency</div>
       <div class="tt-row">Active vendors: <span>${d.vendor_count}</span></div>
-      ${estM ? `<div class="tt-row">${currentPeriod} tech spend: <span>$${estM}M</span></div>` : ''}
+      ${d._estSpend ? `<div class="tt-row">${currentPeriod} tech spend: <span>${fmtUSD(d._estSpend)}</span></div>` : ''}
     `;
   }
   positionTooltip(event);
@@ -1256,11 +1266,17 @@ function buildSankey() {
     const vendorClassById = {};
     vendorNodes.forEach(v => { vendorClassById[v.id] = v.classification; });
 
+    const vendorDescById = {};
+    vendorNodes.forEach(v => { vendorDescById[v.id] = v.description; });
+
     // First pass: per-maker totals (to decide slider rollup) + self classes
-    const preTotals = {}, selfClass = {};
+    const preTotals = {}, selfClass = {}, selfDesc = {};
     rawMakerLinks.forEach(l => {
       preTotals[l.target] = (preTotals[l.target] || 0) + l.spend;
-      if (l.self && !(l.target in selfClass)) selfClass[l.target] = vendorClassById[l.source];
+      if (l.self && !(l.target in selfClass)) {
+        selfClass[l.target] = vendorClassById[l.source];
+        selfDesc[l.target]  = vendorDescById[l.source];
+      }
     });
 
     // Makers below the min-spend slider roll up into one node instead of
@@ -1289,7 +1305,10 @@ function buildSankey() {
       if (name === 'Unidentified purchases') cls = 'unidentified';
       else if (name === 'Multiple makers')   cls = 'multi';
       else if (name === ROLLUP)              cls = 'other';
-      else cls = MAKER_CLASS[name] || selfClass[name] || 'multi';
+      else cls = (MAKER_CLASS[name] && MAKER_CLASS[name].c) || selfClass[name] || 'multi';
+      // Self-mirrors inherit their vendor's research description; attributed
+      // makers use the rationale from maker_classifications.csv
+      const desc = selfDesc[name] || (MAKER_CLASS[name] && MAKER_CLASS[name].r) || '';
       allNodes.push({
         id: 'maker::' + name,
         label: name,
@@ -1299,7 +1318,7 @@ function buildSankey() {
         direct_spend: a.direct,
         via_spend: a.via,
         via_count: a.sources.size,
-        description: '',
+        description: desc,
       });
     });
   }
@@ -1626,8 +1645,8 @@ function buildTrends() {
         ttName.className = 'tt-name ' + (ttClass[v.classification] || 'tt-type-mixed');
         const yearsActive = ALL_YEARS.filter(yr => vals2[yr]).length;
         ttBody.innerHTML = '<div class="tt-row">Type: <span>' + v.classification + '</span></div>'
-          + '<div class="tt-row">Total: <span>$' + (v.totalSpend / 1e6).toFixed(1) + 'M</span></div>'
-          + (latest ? '<div class="tt-row">FY' + latest + ': <span>$' + (latestVal / 1e6).toFixed(1) + 'M</span></div>' : '')
+          + '<div class="tt-row">Total: <span>' + fmtUSD(v.totalSpend) + '</span></div>'
+          + (latest ? '<div class="tt-row">FY' + latest + ': <span>' + fmtUSD(latestVal) + '</span></div>' : '')
           + '<div class="tt-row">Active years: <span>' + yearsActive + '/' + ALL_YEARS.length + '</span></div>'
           + (v.makerTotal ? '<div class="tt-row" style="margin-top:5px;color:#5a6a80;font-size:11px">Direct payments + purpose-verified reseller pass-through. Unidentified reseller spend excluded, so this is a floor.</div>' : '');
         positionTooltip(event);
@@ -1878,7 +1897,7 @@ searchInput.addEventListener('input', () => {
 
   searchDropdown.innerHTML = matches.map(n => {
     const typeLabel = n.type === 'agency' ? 'agency' : n.classification.toLowerCase();
-    const spendM = n.type === 'vendor' ? ` \u00b7 $${(n.spending/1e6).toFixed(0)}M` : '';
+    const spendM = n.type === 'vendor' ? ` \u00b7 ${fmtUSD(n.spending)}` : '';
     return `<div class="search-result" data-id="${n.id.replace(/"/g, '&quot;')}">
       <span>${n.id}</span>
       <span class="search-result-type">${typeLabel}${spendM}</span>
