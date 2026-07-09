@@ -10,8 +10,10 @@ archive/
 data/archive/
 scripts/archive/
 
+# Internal working files — never committed
+internal/
+
 # Working files and intermediate outputs
-notes/*.csv
 top_100_codes.txt
 data/outputs/confirmed_non_digital_budget_codes.csv
 
