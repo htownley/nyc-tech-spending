@@ -15,6 +15,7 @@ import csv
 import json
 import os
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -152,13 +153,13 @@ def main():
         response = make_api_request(1, 1, fiscal_year)
         if response.status_code != 200:
             print(f"✗ Error: API returned status {response.status_code}")
-            return
+            sys.exit(1)
         _, total_records = parse_transactions(response.text)
 
         if total_records == 0:
             print(f"✗ Error: No records found for FY{fiscal_year}")
             print(f"   Check if FY{fiscal_year} is a valid fiscal year")
-            return
+            sys.exit(1)
 
         progress['total_records'] = total_records
         progress['started_at'] = datetime.now().isoformat()
@@ -211,35 +212,39 @@ def main():
                         chunk_records.extend(transactions)
                         records_in_chunk += len(transactions)
                         print(f"✓ {len(transactions):,} records")
+                        # Advance by what we actually received, not what we asked for
+                        current_record += len(transactions)
                     else:
-                        print("⚠ No records returned")
+                        print("⚠ No records returned — stopping so this range can be retried")
                         break
                 else:
                     print(f"✗ Error: Status {response.status_code}")
                     print(f"  Progress saved. Run script again to resume from record {progress['last_record_downloaded'] + 1:,}")
-                    return
+                    sys.exit(1)
 
             except Exception as e:
                 print(f"✗ Error: {e}")
                 print(f"  Progress saved. Run script again to resume from record {progress['last_record_downloaded'] + 1:,}")
-                return
-
-            current_record += batch_size
+                sys.exit(1)
 
             # Rate limiting
-            import time
             time.sleep(1)
 
-        # Save chunk
+        # Save chunk (may be partial if the API returned an empty batch)
         if chunk_records:
             chunk_file = save_chunk(chunk_records, current_chunk, fieldnames, chunks_dir)
-            progress['last_record_downloaded'] = chunk_end
+            progress['last_record_downloaded'] = current_record - 1
             progress['chunks_completed'].append(chunk_file)
             save_progress(progress, progress_file)
 
             print(f"\n✓ Chunk {current_chunk} saved: {chunk_file}")
             print(f"✓ Total records in chunk: {len(chunk_records):,}")
             print(f"✓ Progress: {progress['last_record_downloaded']:,}/{total_records:,} ({progress['last_record_downloaded']/total_records*100:.1f}%)")
+
+        if progress['last_record_downloaded'] < chunk_end:
+            print(f"\n✗ Chunk {current_chunk} incomplete (stopped at record {progress['last_record_downloaded']:,}).")
+            print(f"  Run the script again to resume from record {progress['last_record_downloaded'] + 1:,}")
+            sys.exit(1)
 
         current_chunk += 1
 
