@@ -1488,17 +1488,39 @@ searchInput.addEventListener('input', () => {
   const q = searchInput.value.trim().toLowerCase();
   if (!q) { searchDropdown.style.display = 'none'; return; }
 
-  const searchSource = currentView === 'trends'
-    ? Object.entries(TIMESERIES).map(([name, d]) => ({
-        id: name, type: 'vendor', classification: d.classification,
-        spending: Object.values(d.yearly).reduce((a, b) => a + b, 0),
-      }))
-    : RAW_NODES;
+  let searchSource;
+  if (currentView === 'trends') {
+    searchSource = Object.entries(TIMESERIES).map(([name, d]) => ({
+      id: name, label: name, type: 'vendor', classification: d.classification,
+      desc: d.description || '',
+      spending: Object.values(d.yearly).reduce((a, b) => a + b, 0),
+    }));
+  } else {
+    searchSource = RAW_NODES.map(n => ({
+      id: n.id, label: n.id, type: n.type, classification: n.classification,
+      desc: n.description || '', spending: n.spending,
+    }));
+    // Sankey: makers are searchable too (brand names like "Esri" live here,
+    // while the vendor column uses legal payee names)
+    if (currentView === 'sankey' && showMakers) {
+      const mlKey = isOtiMode ? 'maker_links_oti' : 'maker_links';
+      const totals = {};
+      (PERIOD_DATA[currentPeriod][mlKey] || []).forEach(l => {
+        totals[l.target] = (totals[l.target] || 0) + l.spend;
+      });
+      Object.entries(totals).forEach(([name, s]) => searchSource.push({
+        id: 'maker::' + name, label: name, type: 'maker',
+        classification: 'maker', desc: '', spending: s,
+      }));
+    }
+  }
+  // Match on display name first, description as fallback (catches brand
+  // names inside legal-name vendors, e.g. "esri" → ENVIRONMENTAL SYSTEMS...)
   const matches = searchSource
-    .filter(n => n.id.toLowerCase().includes(q))
+    .filter(n => n.label.toLowerCase().includes(q) || n.desc.toLowerCase().includes(q))
     .sort((a, b) => {
-      const aStarts = a.id.toLowerCase().startsWith(q) ? 0 : 1;
-      const bStarts = b.id.toLowerCase().startsWith(q) ? 0 : 1;
+      const aStarts = a.label.toLowerCase().startsWith(q) ? 0 : 1;
+      const bStarts = b.label.toLowerCase().startsWith(q) ? 0 : 1;
       return aStarts - bStarts || (b.spending - a.spending);
     })
     .slice(0, 10);
@@ -1507,9 +1529,9 @@ searchInput.addEventListener('input', () => {
 
   searchDropdown.innerHTML = matches.map(n => {
     const typeLabel = n.type === 'agency' ? 'agency' : n.classification.toLowerCase();
-    const spendM = n.type === 'vendor' ? ` · ${fmtUSD(n.spending)}` : '';
+    const spendM = n.type !== 'agency' ? ` · ${fmtUSD(n.spending)}` : '';
     return `<div class="search-result" data-id="${n.id.replace(/"/g, '&quot;')}">
-      <span>${n.id}</span>
+      <span>${n.label}</span>
       <span class="search-result-type">${typeLabel}${spendM}</span>
     </div>`;
   }).join('');
