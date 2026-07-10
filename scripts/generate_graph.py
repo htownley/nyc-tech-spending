@@ -156,6 +156,7 @@ def build_graph_data():
         "SAS INSTITUTE INC.": "SAS Institute",
         "WORKDAY INC": "Workday",
         "DELOITTE CONSULTING LLP": "Deloitte",
+        "ENVIRONMENTAL SYSTEMS RESEARCH INSTITUTE INC": "Esri",
         # Deliberately NOT mapped: GENESYS CONSULTING SERVICES INC (an Albany
         # IT staffing firm, unrelated to Genesys the CX platform company)
     }
