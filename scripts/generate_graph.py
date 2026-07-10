@@ -621,32 +621,45 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     flex-shrink: 0;
   }
 
+  /* Bottom chrome bar: legend + notes left, stats right. Own background so
+     the full-height chart never collides with it. */
   #legend {
     position: fixed;
-    bottom: 20px;
-    left: 22px;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    min-height: 42px;
     z-index: 10;
     display: flex;
-    flex-direction: column;
-    gap: 7px;
-    font-size: 11px;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    align-content: center;
+    gap: 4px 14px;
+    padding: 4px 280px 4px 22px;
+    background: rgba(8,12,20,0.94);
+    border-top: 1px solid rgba(255,255,255,0.07);
+    font-size: 10px;
     color: #6a7a95;
     text-transform: uppercase;
     letter-spacing: 0.5px;
   }
 
-  .legend-item { display: flex; align-items: center; gap: 9px; }
+  .legend-item { display: flex; align-items: center; gap: 7px; white-space: nowrap; }
   .legend-dot { border-radius: 50%; flex-shrink: 0; }
+  #legend-maker-group { display: contents; }
 
   #stats {
     position: fixed;
-    bottom: 20px;
+    bottom: 0;
     right: 22px;
-    z-index: 10;
-    text-align: right;
-    font-size: 11px;
+    height: 42px;
+    z-index: 11;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    font-size: 10px;
     color: #3a4a5f;
-    line-height: 1.8;
     letter-spacing: 0.3px;
   }
 
@@ -738,17 +751,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   }
 
   .sk-label { pointer-events: none; }
-  #sankey-hint {
-    position: fixed;
-    bottom: 20px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 10;
-    font-size: 11px;
-    color: #3a4a5f;
-    letter-spacing: 0.3px;
-    display: none;
-  }
 </style>
 </head>
 <body>
@@ -825,14 +827,14 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   <div id="legend-maker-group" style="display:none">
     <div class="legend-item">
       <div class="legend-dot" style="width:12px;height:12px;background:#5a6472;box-shadow:0 0 6px rgba(90,100,114,0.4)"></div>
-      Unidentified / unattributable
+      Unidentified
     </div>
   </div>
-  <div class="legend-item" id="legend-size-note" style="margin-top:4px;border-top:1px solid rgba(255,255,255,0.06);padding-top:6px">
+  <div class="legend-item" id="legend-size-note" style="border-left:1px solid rgba(255,255,255,0.12);padding-left:16px;color:#4a5a72">
     Node size &#8733; period spending
   </div>
-  <div class="legend-item" id="legend-sankey-note" style="margin-top:4px;border-top:1px solid rgba(255,255,255,0.06);padding-top:6px;display:none">
-    Bar height &amp; band width &#8733; period spend
+  <div class="legend-item" id="legend-sankey-note" style="border-left:1px solid rgba(255,255,255,0.12);padding-left:16px;color:#4a5a72;display:none">
+    Bar height &amp; band width &#8733; period spend &nbsp;&middot;&nbsp; scroll to zoom
   </div>
 </div>
 
@@ -842,7 +844,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
   <div>Connections: <span id="stat-links">&#8212;</span></div>
 </div>
 
-<div id="sankey-hint">Band width &#8733; spend flow &nbsp;|&nbsp; Use min-spend slider to reduce density</div>
 
 <div id="trends-vendor-list"></div>
 
@@ -1325,7 +1326,7 @@ function buildSankey() {
 
   updateStats(allNodes, rawLinks);
 
-  const ML = 230, MR = 240, MT = 52, MB = 24;
+  const ML = 230, MR = 240, MT = 52, MB = 62;
 
   const sankey = d3.sankey()
     .nodeId(d => d.id)
@@ -1749,7 +1750,6 @@ function switchView(view) {
   document.getElementById('stats').style.display = view === 'trends' ? 'none' : '';
   document.getElementById('legend-size-note').style.display   = view === 'network' ? '' : 'none';
   document.getElementById('legend-sankey-note').style.display = view === 'sankey'  ? '' : 'none';
-  document.getElementById('sankey-hint').style.display        = view === 'sankey'  ? 'block' : 'none';
   document.getElementById('maker-toggle').style.display       = view === 'sankey'  ? '' : 'none';
   document.getElementById('legend-maker-group').style.display = view === 'sankey' && showMakers ? '' : 'none';
   // Hide period picker and slider in trends (it shows all years)
@@ -1782,7 +1782,7 @@ periodSelect.addEventListener('change', function() {
   pinnedNodes.clear();
   lockedHighlight = null;
   document.getElementById('legend-size-note').innerHTML = 'Node size &#8733; ' + currentPeriod + ' spending';
-  document.getElementById('legend-sankey-note').innerHTML = 'Bar height &amp; band width &#8733; ' + currentPeriod + ' spend';
+  document.getElementById('legend-sankey-note').innerHTML = 'Bar height &amp; band width &#8733; ' + currentPeriod + ' spend &nbsp;&middot;&nbsp; scroll to zoom';
   if (currentView === 'network') buildGraph();
   else if (currentView === 'sankey') buildSankey();
 });
